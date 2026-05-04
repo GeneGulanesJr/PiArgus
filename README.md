@@ -25,9 +25,13 @@ Heavy tier is optional — light tier works standalone.
 ## Install
 
 ```bash
-git clone https://github.com/genegulanesjr/PiArgus.git ~/.pi/agent/extensions/piargus
-cd ~/.pi/agent/extensions/piargus
-npm install
+pi install git:github.com/genegulanesjr/PiArgus
+```
+
+Or, once published to npm:
+
+```bash
+pi install npm:piargus
 ```
 
 ## Test

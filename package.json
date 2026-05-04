@@ -1,14 +1,29 @@
 {
   "name": "piargus",
   "version": "2.0.0",
-  "private": true,
+  "description": "Two-tier browser extension for Pi — Obscura (light) + smolvm/Chromium (heavy)",
   "type": "module",
+  "keywords": ["pi-package", "pi-extension", "browser", "automation", "scraping", "screenshot"],
+  "files": [
+    "*.ts",
+    "smolfier/**/*",
+    "docs/**/*",
+    "README.md"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@sinclair/typebox": "*"
+  },
   "devDependencies": {
     "vitest": "^3.0.0",
     "tsx": "^4.0.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"],
+    "image": "https://raw.githubusercontent.com/genegulanesjr/PiArgus/main/docs/architecture.png"
   }
 }

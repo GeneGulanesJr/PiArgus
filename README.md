@@ -13,6 +13,8 @@ Named for Argus Panoptes, the hundred-eyed giant of Greek myth who sees all.
 
 Routes automatically — no manual tier selection needed.
 
+![PiArgus Architecture](docs/architecture.png)
+
 ## Requirements
 
 - **Light tier**: [Obscura](https://github.com/obscura-browser/obscura) (`~/.local/bin/obscura`)

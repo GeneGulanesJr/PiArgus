@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640">
+<style>
+  text { font-family: "SF Mono", "Fira Code", "Cascadia Code", "Courier New", monospace; }
+  .title { font-size: 18px; font-weight: 700; fill: #e2e8f0; }
+  .node-label { font-size: 13px; font-weight: 600; fill: #e2e8f0; }
+  .node-sub { font-size: 11px; fill: #94a3b8; }
+  .tier-label { font-size: 10px; fill: #64748b; letter-spacing: 0.05em; }
+  .arrow-label { font-size: 10px; fill: #e2e8f0; }
+  .legend-text { font-size: 10px; fill: #94a3b8; }
+  .legend-title { font-size: 11px; font-weight: 600; fill: #e2e8f0; }
+</style>
+<defs>
+  <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#0f0f1a"/>
+    <stop offset="100%" stop-color="#1a1a2e"/>
+  </linearGradient>
+  <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#3b82f6"/>
+  </marker>
+  <marker id="arr-purple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#a855f7"/>
+  </marker>
+  <marker id="arr-orange" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#f97316"/>
+  </marker>
+  <marker id="arr-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#10b981"/>
+  </marker>
+  <marker id="arr-gold" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#eab308"/>
+  </marker>
+  <marker id="arr-gray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+    <polygon points="0 0, 8 3, 0 6" fill="#64748b"/>
+  </marker>
+  <filter id="glow-purple">
+    <feGaussianBlur stdDeviation="3" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="glow-orange">
+    <feGaussianBlur stdDeviation="3" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+<rect width="960" height="640" fill="url(#bg)"/>
+  <rect x="30" y="20" width="900" height="130" rx="8" fill="#0f172a" fill-opacity="0.4" stroke="#1e293b" stroke-width="1"/>
+  <text x="48" y="38" class="tier-label">INPUT LAYER</text>
+  <rect x="30" y="170" width="900" height="130" rx="8" fill="#0f172a" fill-opacity="0.4" stroke="#1e293b" stroke-width="1"/>
+  <text x="48" y="188" class="tier-label">ROUTING LAYER</text>
+  <rect x="30" y="320" width="900" height="160" rx="8" fill="#0f172a" fill-opacity="0.3" stroke="#1e293b" stroke-width="1"/>
+  <text x="48" y="338" class="tier-label">EXECUTION LAYER</text>
+  <rect x="30" y="500" width="900" height="120" rx="8" fill="#0f172a" fill-opacity="0.4" stroke="#1e293b" stroke-width="1"/>
+  <text x="48" y="518" class="tier-label">TARGET</text>
+  <rect x="330" y="47" width="300" height="56" rx="28" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="480" y="71" text-anchor="middle" class="node-label">Pi Coding Agent</text>
+  <text x="480" y="89" text-anchor="middle" class="node-sub">Invokes browser tools via Extension API</text>
+  <rect x="310" y="180" width="340" height="60" rx="8" fill="#1e1b4b" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="480" y="202" text-anchor="middle" class="node-label">PiArgus Extension (index.ts)</text>
+  <text x="480" y="222" text-anchor="middle" class="node-sub">Registers tools · Tier router · CLI wrappers</text>
+  <polygon points="480,240 580,290 480,340 380,290"
+           fill="#1c1917" stroke="#f97316" stroke-width="1.5" filter="url(#glow-orange)"/>
+  <text x="480" y="288" text-anchor="middle" class="node-label" fill="#f97316">Tier</text>
+  <text x="480" y="304" text-anchor="middle" class="node-label" fill="#f97316">Router</text>
+  <rect x="100" y="360" width="240" height="80" rx="8" fill="#052e16" stroke="#10b981" stroke-width="1.5"/>
+  <rect x="110" y="362" width="220" height="18" rx="4" fill="#0a4026"/>
+  <circle cx="212" cy="371" r="2.5" fill="#10b981" opacity="0.7"/>
+  <circle cx="220" cy="371" r="2.5" fill="#10b981" opacity="0.7"/>
+  <circle cx="228" cy="371" r="2.5" fill="#10b981" opacity="0.7"/>
+  <text x="220" y="400" text-anchor="middle" class="node-label" fill="#10b981">Obscura</text>
+  <text x="220" y="418" text-anchor="middle" class="node-sub">V8 · 30MB · Stateless</text>
+  <text x="220" y="434" text-anchor="middle" class="tier-label" fill="#10b981">LIGHT TIER</text>
+  <rect x="620" y="360" width="240" height="80" rx="8" fill="#1c1917" stroke="#eab308" stroke-width="1.5"/>
+  <rect x="630" y="362" width="220" height="18" rx="4" fill="#2d2410"/>
+  <circle cx="732" cy="371" r="2.5" fill="#eab308" opacity="0.7"/>
+  <circle cx="740" cy="371" r="2.5" fill="#eab308" opacity="0.7"/>
+  <circle cx="748" cy="371" r="2.5" fill="#eab308" opacity="0.7"/>
+  <text x="740" y="400" text-anchor="middle" class="node-label" fill="#eab308">smolvm + Chromium</text>
+  <text x="740" y="418" text-anchor="middle" class="node-sub">microVM · GPU · Persistent</text>
+  <text x="740" y="434" text-anchor="middle" class="tier-label" fill="#eab308">HEAVY TIER</text>
+  <rect x="380" y="535" width="200" height="50" rx="25" fill="#1e293b" stroke="#64748b" stroke-width="1"/>
+  <text x="480" y="565" text-anchor="middle" class="node-label">🌐 The Web</text>
+  <path d="M 480,103 L 480,180" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arr-blue)"/>
+  <path d="M 480,240 L 480,240" stroke="#a855f7" stroke-width="1.5" fill="none" marker-end="url(#arr-purple)"/>
+  <path d="M 380,290 L 220,360" stroke="#10b981" stroke-width="1.5" fill="none" marker-end="url(#arr-green)"/>
+  <path d="M 580,290 L 740,360" stroke="#eab308" stroke-width="1.5" fill="none" marker-end="url(#arr-gold)"/>
+  <path d="M 220,440 L 220,535" stroke="#10b981" stroke-width="1.5" fill="none" marker-end="url(#arr-green)"/>
+  <path d="M 740,440 L 740,535" stroke="#eab308" stroke-width="1.5" fill="none" marker-end="url(#arr-gold)"/>
+  <rect x="108" y="325" width="118" height="14" rx="3" fill="#0f0f1a" opacity="0.95"/>
+  <text x="167" y="336" text-anchor="middle" class="arrow-label" fill="#10b981">fetch · eval · scrape</text>
+  <rect x="650" y="325" width="150" height="14" rx="3" fill="#0f0f1a" opacity="0.95"/>
+  <text x="725" y="336" text-anchor="middle" class="arrow-label" fill="#eab308">screenshot · click · fill</text>
+  <rect x="660" y="545" width="270" height="85" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1" opacity="0.9"/>
+  <text x="795" y="561" text-anchor="middle" class="legend-title">LEGEND</text>
+  <line x1="676" y1="579" x2="706" y2="579" stroke="#10b981" stroke-width="1.5"/>
+  <polygon points="706,576 712,579 706,582" fill="#10b981"/>
+  <text x="720" y="583" class="legend-text">Light tier</text>
+  <line x1="676" y1="597" x2="706" y2="597" stroke="#eab308" stroke-width="1.5"/>
+  <polygon points="706,594 712,597 706,600" fill="#eab308"/>
+  <text x="720" y="601" class="legend-text">Heavy tier</text>
+  <line x1="676" y1="615" x2="706" y2="615" stroke="#3b82f6" stroke-width="1.5"/>
+  <polygon points="706,612 712,615 706,618" fill="#3b82f6"/>
+  <text x="720" y="619" class="legend-text">Tool call</text>
+</svg>

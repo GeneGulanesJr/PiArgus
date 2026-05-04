@@ -97,8 +97,10 @@ describe("formatResults", () => {
   });
 });
 
+const SEARXNG_AVAILABLE = !!process.env.SEARXNG_URL;
+
 describe("searchSearXNG (integration)", () => {
-  it("returns search results from the configured SearXNG instance", async () => {
+  it.skipIf(!SEARXNG_AVAILABLE)("returns search results from the configured SearXNG instance", async () => {
     const result = await searchSearXNG("hello world", { maxResults: 3 });
     expect(typeof result.totalResults).toBe("number");
     expect(result.query).toBe("hello world");

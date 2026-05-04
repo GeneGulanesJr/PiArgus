@@ -1,9 +1,9 @@
 {
   "name": "piargus",
   "version": "2.0.0",
-  "description": "Two-tier browser extension for Pi — Obscura (light) + smolvm/Chromium (heavy)",
+  "description": "Two-tier browser + SearXNG search extension for Pi — Obscura (light) + smolvm/Chromium (heavy) + web search",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "browser", "automation", "scraping", "screenshot"],
+  "keywords": ["pi-package", "pi-extension", "browser", "automation", "scraping", "screenshot", "search", "searxng"],
   "files": [
     "*.ts",
     "smolfier/**/*",

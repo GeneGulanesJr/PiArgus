@@ -32,6 +32,9 @@ import {
 // Router
 import { classifyTier, tierExplanation } from "./tier-router";
 
+// Web search
+import { registerWebSearch } from "./web-search";
+
 // Types
 import type { BrowserTier } from "./types";
 
@@ -53,6 +56,12 @@ export default async function (pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     try { await stopVm(); } catch { /* best-effort */ }
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: WEB_Search (SearXNG metasearch)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  registerWebSearch(pi);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TOOL: browser_navigate (LIGHT — Obscura)

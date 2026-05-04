@@ -1,0 +1,22 @@
+# smolfier/browser.smolfile
+# Headless Chromium microVM for heavy-tier browser operations
+# - GPU-accelerated rendering via virtio-gpu / Venus
+# - Chromium + ANGLE + mesa-vulkan-virtio for WebGL
+# - Sub-200ms cold boot, elastic memory via virtio balloon
+
+image = "alpine:edge"
+
+cpus = 4
+memory = 4096
+gpu = true
+gpu_vram = 2048
+net = true
+
+env = [
+    "VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/virtio_icd.x86_64.json",
+]
+
+[dev]
+init = [
+    "apk add --no-cache chromium chromium-angle mesa-vulkan-virtio vulkan-loader font-opensans",
+]

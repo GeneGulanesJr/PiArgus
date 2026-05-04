@@ -1,6 +1,6 @@
 // smolvm.ts — smolvm CLI wrapper for heavy-tier browser operations
 
-import { exec as execCb } from "node:child_process";
+import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -8,7 +8,7 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import type { SmolvmState } from "./types";
 
-const execAsync = promisify(execCb);
+const execFileAsync = promisify(execFileCb);
 
 const VM_NAME = "pi-browser-heavy";
 const SMOLFILE_DIR = join(dirname(new URL(import.meta.url).pathname), "smolfier");
@@ -43,7 +43,7 @@ async function smolvmExec(
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const bin = SMOLVM_PATH();
   try {
-    const { stdout, stderr } = await execAsync(`"${bin}" ${args.join(" ")}`, {
+    const { stdout, stderr } = await execFileAsync(bin, args, {
       timeout: timeoutMs,
       maxBuffer: 50 * 1024 * 1024,
     });

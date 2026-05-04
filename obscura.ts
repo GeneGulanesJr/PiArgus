@@ -1,10 +1,10 @@
 // obscura.ts — Obscura CLI wrapper for light-tier browser operations
 
-import { exec as execCb } from "node:child_process";
+import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 
-const execAsyncCb = promisify(execCb);
+const execFileAsync = promisify(execFileCb);
 
 /** Find the obscura binary */
 export function OBSCURA_PATH(): string {
@@ -27,7 +27,7 @@ export async function execAsync(
 ): Promise<{ stdout: string; stderr: string }> {
   const bin = OBSCURA_PATH();
   try {
-    const { stdout, stderr } = await execAsyncCb(`"${bin}" ${args.join(" ")}`, {
+    const { stdout, stderr } = await execFileAsync(bin, args, {
       timeout: timeoutMs,
       maxBuffer: 50 * 1024 * 1024,
     });

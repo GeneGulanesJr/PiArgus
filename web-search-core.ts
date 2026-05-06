@@ -1,4 +1,4 @@
-// web-search-core.ts — Pure SearXNG search logic (no Pi/TypeBox deps)
+// web-search-core.ts — Pure SearXNG search logic using JSON API (no HTML scraping)
 
 export interface SearchResult {
   title: string;
@@ -14,66 +14,31 @@ export interface SearchResponse {
   query: string;
 }
 
+/** Raw JSON response from SearXNG's JSON API */
+interface SearXNGJsonResult {
+  title: string;
+  url: string;
+  content: string;
+  engines: string[];
+  publishedDate?: string;
+  category?: string;
+}
+
+interface SearXNGJsonResponse {
+  query: string;
+  number_of_results: number;
+  results: SearXNGJsonResult[];
+  answers: string[];
+  suggestions: string[];
+  unresponsive_engines: string[];
+}
+
 function getSearXNGUrl(): string {
   return process.env.SEARXNG_URL || "http://192.168.100.105:30053";
 }
 
-const DEFAULT_MAX_RESULTS = 10;
+export const DEFAULT_MAX_RESULTS = 10;
 const SEARCH_TIMEOUT_MS = 30_000;
-
-export function stripHtml(html: string): string {
-  return html
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/<[^>]*>/g, "")
-    .trim();
-}
-
-export function parseResults(html: string, maxResults: number): SearchResult[] {
-  const results: SearchResult[] = [];
-  const articleRegex = /<article[^>]*class="result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = articleRegex.exec(html)) !== null && results.length < maxResults) {
-    const article = match[1];
-
-    const titleMatch = article.match(
-      /<h3[^>]*>\s*<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>\s*<\/h3>/i
-    );
-    if (!titleMatch) continue;
-
-    const url = titleMatch[1];
-    const title = stripHtml(titleMatch[2]);
-    if (!url || !title) continue;
-
-    const snippetMatch = article.match(/<p\s+class="content">([\s\S]*?)<\/p>/i);
-    const snippet = snippetMatch ? stripHtml(snippetMatch[1]) : "";
-
-    const engines: string[] = [];
-    const enginesMatch = article.match(/<div\s+class="engines">([\s\S]*?)<\/div>/i);
-    if (enginesMatch) {
-      const spanRegex = /<span>([^<]+)<\/span>/gi;
-      let engineMatch: RegExpExecArray | null;
-      while ((engineMatch = spanRegex.exec(enginesMatch[1])) !== null) {
-        engines.push(engineMatch[1].trim());
-      }
-    }
-
-    const dateMatch = article.match(
-      /<time[^>]*class="published_date"[^>]*>\s*([\s\S]*?)\s*<\/time>/i
-    );
-    const publishedDate = dateMatch ? stripHtml(dateMatch[1]) : undefined;
-
-    results.push({ title, url, snippet, engines, publishedDate });
-  }
-
-  return results;
-}
 
 export async function searchSearXNG(
   query: string,
@@ -90,12 +55,11 @@ export async function searchSearXNG(
 
   const params = new URLSearchParams();
   params.set("q", query);
-  params.set("theme", "simple");
+  params.set("format", "json");          // ← JSON API instead of HTML
   params.set("safesearch", "0");
   params.set("language", options.language ?? "auto");
 
   if (options.categories) {
-    params.set(`category_${options.categories}`, "1");
     params.set("categories", options.categories);
   } else {
     params.set("category_general", "1");
@@ -113,6 +77,7 @@ export async function searchSearXNG(
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "application/json",
       "User-Agent": "PiArgus/2.0 (Web Search Tool)",
     },
     body: params.toString(),
@@ -123,16 +88,23 @@ export async function searchSearXNG(
     throw new Error(`SearXNG returned HTTP ${response.status}: ${response.statusText}`);
   }
 
-  const html = await response.text();
-  const results = parseResults(html, maxResults);
+  const json = await response.json() as SearXNGJsonResponse;
+  const rawResults = json.results || [];
 
-  let totalResults = results.length;
-  const totalMatch = html.match(/(?:About\s+)?(\d[\d,]+)\s+results?/i);
-  if (totalMatch) {
-    totalResults = parseInt(totalMatch[1].replace(/,/g, ""), 10);
-  }
+  // Slice and map JSON API's "content" → our "snippet"
+  const results: SearchResult[] = rawResults.slice(0, maxResults).map((r) => ({
+    title: r.title || "",
+    url: r.url || "",
+    snippet: r.content || "",
+    engines: r.engines || [],
+    publishedDate: r.publishedDate || undefined,
+  }));
 
-  return { results, totalResults, query };
+  return {
+    results,
+    totalResults: json.number_of_results ?? results.length,
+    query,
+  };
 }
 
 export function formatResults(searchResult: SearchResponse): string {

@@ -1,17 +1,37 @@
 // smolvm.ts — smolvm CLI wrapper for heavy-tier browser operations
+// Uses puppeteer-core inside the VM for CDP-driven browser automation
 
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { join, dirname } from "node:path";
-import { homedir } from "node:os";
 import type { SmolvmState } from "./types";
 
 const execFileAsync = promisify(execFileCb);
 
 const VM_NAME = "pi-browser-heavy";
 const SMOLFILE_DIR = join(dirname(new URL(import.meta.url).pathname), "smolfier");
+
+// ─── Interaction types ─────────────────────────────────────────────────────
+
+/** Interaction action types for the heavy tier */
+export type InteractionAction =
+  | { type: "click"; selector: string }
+  | { type: "fill"; selector: string; value: string }
+  | { type: "hover"; selector: string }
+  | { type: "wait_for"; selector: string; timeout?: number }
+  | { type: "scroll"; x?: number; y?: number }
+  | { type: "keypress"; key: string };
+
+/** Result from a page interaction */
+export interface InteractionResult {
+  success: boolean;
+  html?: string;
+  error?: string;
+}
+
+// ─── Binary discovery ──────────────────────────────────────────────────────
 
 /** Find the smolvm binary */
 export function SMOLVM_PATH(): string {
@@ -36,6 +56,8 @@ export function isSmolvmInstalled(): boolean {
   }
 }
 
+// ─── CLI execution ─────────────────────────────────────────────────────────
+
 /** Execute a smolvm CLI command */
 async function smolvmExec(
   args: string[],
@@ -56,6 +78,8 @@ async function smolvmExec(
     };
   }
 }
+
+// ─── VM lifecycle ──────────────────────────────────────────────────────────
 
 /** Ensure the Chromium VM is created and running */
 export async function ensureVm(): Promise<{ running: boolean; error?: string }> {
@@ -124,7 +148,9 @@ export async function vmExec(
   return smolvmExec(args, opts?.timeout ?? 60_000);
 }
 
-/** Take a screenshot of a URL inside the VM */
+// ─── Screenshot ────────────────────────────────────────────────────────────
+
+/** Take a screenshot of a URL inside the VM using puppeteer-core */
 export async function screenshot(
   url: string,
   outputPath: string,
@@ -137,27 +163,43 @@ export async function screenshot(
 
   const width = opts?.width ?? 1280;
   const height = opts?.height ?? 800;
+  const fullPage = opts?.fullPage ?? false;
 
-  const args = [
-    "chromium",
-    "--headless=new",
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--screenshot=/tmp/smolvm-screenshot.png",
-    `--window-size=${width},${height}`,
-  ];
+  // Generate a Node.js script that drives Chromium via puppeteer-core
+  const script = `
+const puppeteer = require('puppeteer-core');
+(async () => {
+  const browser = await puppeteer.launch({
+    executablePath: process.env.CHROME_BIN || '/usr/bin/chromium',
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+  const page = await browser.newPage();
+  await page.setViewport({ width: ${width}, height: ${height} });
+  await page.goto('${url}', { waitUntil: 'networkidle2', timeout: 15000 });
+  await page.screenshot({
+    path: '/tmp/smolvm-screenshot.png',
+    fullPage: ${fullPage},
+  });
+  await browser.close();
+  console.log('OK');
+})();
+`.trim();
 
-  if (opts?.fullPage) {
-    args.push("--screenshot=/tmp/smolvm-screenshot.png", "--virtual-time-budget=5000");
+  // Write script to VM and execute
+  const writeResult = await vmExec(
+    ["sh", "-c", `cat > /tmp/screenshot.js << 'SCRIPT'\n${script}\nSCRIPT`],
+    { timeout: 5_000 }
+  );
+
+  if (writeResult.exitCode !== 0) {
+    return { path: outputPath, error: `Failed to write screenshot script: ${writeResult.stderr}` };
   }
 
-  args.push(url);
+  const nodeResult = await vmExec(["node", "/tmp/screenshot.js"], { timeout: 30_000 });
 
-  const result = await vmExec(args, { timeout: 30_000 });
-
-  if (result.exitCode !== 0) {
-    return { path: outputPath, error: `Screenshot failed: ${result.stderr}` };
+  if (nodeResult.exitCode !== 0) {
+    return { path: outputPath, error: `Screenshot failed: ${nodeResult.stderr || nodeResult.stdout}` };
   }
 
   // Copy screenshot from VM to host via base64
@@ -175,91 +217,102 @@ export async function screenshot(
   return { path: outputPath };
 }
 
-/** Click an element on a page (via headless Chromium JS eval) */
-export async function clickElement(
+// ─── CDP interactions ──────────────────────────────────────────────────────
+
+/**
+ * Perform one or more browser interactions on a page using puppeteer-core
+ * inside the smolvm VM. Returns the final page HTML after all actions.
+ */
+export async function interact(
   url: string,
-  selector: string,
-  opts?: { timeout?: number }
-): Promise<{ stdout: string; error?: string }> {
+  actions: InteractionAction[],
+  opts?: { timeout?: number; stealth?: boolean }
+): Promise<InteractionResult> {
   const ensure = await ensureVm();
   if (!ensure.running) {
-    return { stdout: "", error: ensure.error };
+    return { success: false, error: ensure.error };
   }
 
-  const jsCode = `
-    const page = await (await import('puppeteer')).default.launch({
-      executablePath: 'chromium',
-      headless: true,
-      args: ['--no-sandbox', '--disable-dev-shm-usage']
-    });
-    const tab = await page.newPage();
-    await tab.goto('${url}', { waitUntil: 'networkidle0', timeout: ${(opts?.timeout ?? 15) * 1000} });
-    await tab.waitForSelector('${selector}', { timeout: ${(opts?.timeout ?? 15) * 1000} });
-    await tab.click('${selector}');
-    await page.waitForNetworkIdle({ timeout: 5000 }).catch(() => {});
-    const html = await tab.content();
-    await page.close();
-    JSON.stringify({ success: true, contentLength: html.length });
-  `;
+  // Serialize actions to JSON for the Node.js script inside the VM
+  const actionsJson = JSON.stringify(actions)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'");
 
-  // Simpler approach: use chromium --headless with JS eval via --dump
-  const result = await vmExec([
-    "chromium", "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
-    "--dump-dom",
-    url,
-  ], { timeout: opts?.timeout ?? 15_000 });
+  const stealthSetup = opts?.stealth
+    ? `await page.evaluateOnNewDocument(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); });`
+    : "";
 
-  if (result.exitCode !== 0) {
-    return { stdout: "", error: result.stderr };
-  }
+  const timeoutMs = (opts?.timeout ?? 15) * 1000;
 
-  return { stdout: result.stdout };
-}
-
-/** Fill a form field and submit */
-export async function fillForm(
-  url: string,
-  selector: string,
-  value: string,
-  opts?: { submit?: boolean; timeout?: number }
-): Promise<{ stdout: string; error?: string }> {
-  const ensure = await ensureVm();
-  if (!ensure.running) {
-    return { stdout: "", error: ensure.error };
-  }
-
-  // Use chromium headless to render the page after JS-based fill
   const script = `
-    const result = await chromium --headless=new --no-sandbox --disable-dev-shm-usage \\
-      --dump-dom '${url}'
-  `;
+const puppeteer = require('puppeteer-core');
+const actions = JSON.parse('${actionsJson}');
+(async () => {
+  const browser = await puppeteer.launch({
+    executablePath: process.env.CHROME_BIN || '/usr/bin/chromium',
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+  const page = await browser.newPage();
+  ${stealthSetup}
+  await page.goto('${url}', { waitUntil: 'networkidle2', timeout: ${timeoutMs} });
 
-  const result = await vmExec([
-    "sh", "-c", script,
-  ], { timeout: opts?.timeout ?? 15_000 });
-
-  if (result.exitCode !== 0) {
-    return { stdout: "", error: result.stderr };
+  for (const action of actions) {
+    switch (action.type) {
+      case 'click':
+        await page.waitForSelector(action.selector, { timeout: 5000 });
+        await page.click(action.selector);
+        await page.waitForNetworkIdle({ timeout: 3000 }).catch(() => {});
+        break;
+      case 'fill':
+        await page.waitForSelector(action.selector, { timeout: 5000 });
+        await page.click(action.selector, { clickCount: 3 });
+        await page.type(action.selector, action.value);
+        break;
+      case 'hover':
+        await page.waitForSelector(action.selector, { timeout: 5000 });
+        await page.hover(action.selector);
+        break;
+      case 'wait_for':
+        await page.waitForSelector(action.selector, { timeout: action.timeout || 5000 });
+        break;
+      case 'scroll':
+        await page.evaluate((x, y) => window.scrollBy(x || 0, y || 0), action.x, action.y);
+        break;
+      case 'keypress':
+        await page.keyboard.press(action.key);
+        break;
+    }
   }
 
-  return { stdout: result.stdout };
-}
+  const html = await page.content();
+  await browser.close();
+  process.stdout.write(html);
+})();
+`.trim();
 
-/** Render a page to HTML via Chromium in the VM (full browser engine) */
-export async function renderPage(
-  url: string,
-  opts?: { waitUntil?: string; stealth?: boolean; timeout?: number }
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const ensure = await ensureVm();
-  if (!ensure.running) {
-    return { stdout: "", stderr: ensure.error ?? "VM not running", exitCode: 1 };
+  // Write the interaction script into the VM
+  const writeResult = await vmExec(
+    ["sh", "-c", `cat > /tmp/interact.js << 'SCRIPT'\n${script}\nSCRIPT`],
+    { timeout: 5_000 }
+  );
+
+  if (writeResult.exitCode !== 0) {
+    return { success: false, error: `Failed to write interaction script: ${writeResult.stderr}` };
   }
 
-  return vmExec([
-    "chromium", "--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
-    "--dump-dom", url,
-  ], { timeout: opts?.timeout ?? 30_000 });
+  const nodeResult = await vmExec(["node", "/tmp/interact.js"], {
+    timeout: timeoutMs,
+  });
+
+  if (nodeResult.exitCode !== 0) {
+    return { success: false, error: nodeResult.stderr || nodeResult.stdout };
+  }
+
+  return { success: true, html: nodeResult.stdout };
 }
+
+// ─── VM status ─────────────────────────────────────────────────────────────
 
 /** Get VM status */
 export async function getVmStatus(): Promise<SmolvmState> {

@@ -24,9 +24,8 @@ import {
   ensureVm,
   stopVm,
   screenshot as smolvmScreenshot,
-  renderPage,
+  interact,
   getVmStatus,
-  vmExec,
 } from "./smolvm";
 
 // Router
@@ -196,8 +195,7 @@ export default async function (pi: ExtensionAPI) {
     async execute(_id, params, signal) {
       const outputPath = params.path || "/tmp/shot.png";
 
-      const result = await smolvmScreenshot(outputPath, {
-        url: params.url,
+      const result = await smolvmScreenshot(params.url, outputPath, {
         fullPage: params.full_page,
         width: params.width,
         height: params.height,

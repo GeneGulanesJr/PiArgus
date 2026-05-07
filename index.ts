@@ -516,7 +516,7 @@ export default async function (pi: ExtensionAPI) {
             `🖥️  Heavy Tier (smolvm + Chromium)\n` +
             `   smolvm installed: ${smolvmOk ? "✅" : "❌"}\n` +
             `   VM state: ${vmState}\n` +
-            `   Use for: screenshots, clicks, form fills, GPU rendering\n\n` +
+            `   Use for: screenshots, clicks, form fills, CDP automation\n\n` +
             `💡 Tip: Call with action='start' to pre-warm the heavy tier.`,
         }],
         details: {

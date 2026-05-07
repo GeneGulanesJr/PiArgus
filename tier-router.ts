@@ -3,7 +3,7 @@
 import type { BrowserTier } from "./types";
 
 /** Operations that always require the heavy tier (smolvm+Chromium) */
-const HEAVY_ACTIONS = new Set(["click", "fill", "hover", "drag", "screenshot", "wait_for"]);
+const HEAVY_ACTIONS = new Set(["click", "fill", "hover", "wait_for"]);
 
 /**
  * Classify which browser tier a tool call should use.

@@ -1,25 +1,47 @@
 // test/smolvm.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// We need to mock at the smolvmExec level, but it's private.
-// Instead, mock child_process and handle the promisified callback pattern.
-// The key insight: promisify(execFile) calls execFile(file, args, opts, callback)
-// where callback = (err, result) => ...
+// vi.hoisted runs before vi.mock factories, so mock definitions here
+// are available when the mock factory executes
+const { mockExecFile, mockCallCount, mockImplementations, resetMocks, replyOk, replyFail } = vi.hoisted(() => {
+  let callCount = 0;
+  let implementations: Array<(args: string[], cb: Function) => void> = [];
 
-let mockCallCount = 0;
-let mockImplementations: Array<(args: string[], cb: Function) => void> = [];
+  const execFile = vi.fn((_cmd: string, args: string[], _opts: any, cb: Function) => {
+    if (callCount < implementations.length) {
+      implementations[callCount](args, cb);
+    } else {
+      cb(null, { stdout: "", stderr: "" });
+    }
+    callCount++;
+  });
 
-const mockExecFile = vi.fn((_cmd: string, args: string[], _opts: any, cb: Function) => {
-  if (mockCallCount < mockImplementations.length) {
-    mockImplementations[mockCallCount](args, cb);
-  } else {
-    cb(null, { stdout: "", stderr: "" });
+  function reset() {
+    callCount = 0;
+    implementations = [];
+    execFile.mockClear();
   }
-  mockCallCount++;
+
+  function ok(stdout: string) {
+    return (_args: string[], cb: Function) => cb(null, { stdout, stderr: "" });
+  }
+
+  function fail(stderr: string, code = 1) {
+    return (_args: string[], cb: Function) => cb({ code, stderr, stdout: "" });
+  }
+
+  return {
+    mockExecFile: execFile,
+    mockCallCount: { get: () => callCount },
+    mockImplementations: { get: () => implementations, set: (v: any) => { implementations = v; } },
+    resetMocks: reset,
+    replyOk: ok,
+    replyFail: fail,
+  };
 });
 
 vi.mock("node:child_process", () => ({
-  execFile: (...args: any[]) => mockExecFile(...args),
+  execFile: mockExecFile,
 }));
 
 vi.mock("node:fs", () => ({
@@ -35,20 +57,8 @@ vi.mock("node:fs/promises", () => ({
 import { SMOLVM_PATH, isSmolvmInstalled, getVmStatus, interact } from "../smolvm";
 
 beforeEach(() => {
-  mockCallCount = 0;
-  mockImplementations = [];
-  mockExecFile.mockClear();
+  resetMocks();
 });
-
-// Helper: simulate a successful call
-function replyOk(stdout: string) {
-  return (args: string[], cb: Function) => cb(null, { stdout, stderr: "" });
-}
-
-// Helper: simulate a failing call (promisify treats first arg as error)
-function replyFail(stderr: string, code = 1) {
-  return (_args: string[], cb: Function) => cb({ code, stderr, stdout: "" });
-}
 
 describe("SMOLVM_PATH", () => {
   it("returns a path string", () => {
@@ -67,19 +77,19 @@ describe("isSmolvmInstalled", () => {
 
 describe("getVmStatus", () => {
   it("returns 'running' when machine reports running", async () => {
-    mockImplementations = [replyOk("running\n")];
+    mockImplementations.set([replyOk("running\n")]);
     const status = await getVmStatus();
     expect(status).toBe("running");
   });
 
   it("returns 'stopped' when machine reports stopped", async () => {
-    mockImplementations = [replyOk("stopped\n")];
+    mockImplementations.set([replyOk("stopped\n")]);
     const status = await getVmStatus();
     expect(status).toBe("stopped");
   });
 
   it("returns 'stopped' when machine not found", async () => {
-    mockImplementations = [replyFail("machine not found")];
+    mockImplementations.set([replyFail("machine not found")]);
     const status = await getVmStatus();
     expect(status).toBe("stopped");
   });
@@ -87,13 +97,13 @@ describe("getVmStatus", () => {
 
 describe("interact", () => {
   it("bootstraps VM and executes interaction successfully", async () => {
-    mockImplementations = [
-      replyFail("not found"),     // 1: machine status — not found
+    mockImplementations.set([
+      replyFail("not found"),     // 1: machine status — not found (will try create)
       replyOk("created\n"),       // 2: machine create
       replyOk("started\n"),       // 3: machine start
       replyOk(""),                // 4: write interact script
       replyOk("<html>clicked</html>"), // 5: node interact.js
-    ];
+    ]);
 
     const result = await interact("https://example.com", [
       { type: "click", selector: "button" },
@@ -103,12 +113,28 @@ describe("interact", () => {
     expect(result.html).toContain("clicked");
   });
 
+  it("starts stopped VM", async () => {
+    mockImplementations.set([
+      replyOk("stopped\n"),       // 1: machine status — stopped (will just start)
+      replyOk("started\n"),       // 2: machine start
+      replyOk(""),                // 3: write interact script
+      replyOk("<html>filled</html>"), // 4: node interact.js
+    ]);
+
+    const result = await interact("https://example.com", [
+      { type: "fill", selector: "input", value: "test" },
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(result.html).toContain("filled");
+  });
+
   it("uses already-running VM", async () => {
-    mockImplementations = [
+    mockImplementations.set([
       replyOk("running\n"),       // 1: machine status — running
       replyOk(""),                // 2: write interact script
       replyOk("<html>filled</html>"), // 3: node interact.js
-    ];
+    ]);
 
     const result = await interact("https://example.com", [
       { type: "fill", selector: "input", value: "test" },
@@ -119,11 +145,11 @@ describe("interact", () => {
   });
 
   it("returns error when script fails", async () => {
-    mockImplementations = [
+    mockImplementations.set([
       replyOk("running\n"),       // 1: machine status — running
       replyOk(""),                // 2: write interact script
       replyFail("Puppeteer error"), // 3: node interact.js fails
-    ];
+    ]);
 
     const result = await interact("https://example.com", [
       { type: "fill", selector: "input", value: "test" },
@@ -134,10 +160,10 @@ describe("interact", () => {
   });
 
   it("returns error when script write fails", async () => {
-    mockImplementations = [
+    mockImplementations.set([
       replyOk("running\n"),       // 1: machine status — running
       replyFail("disk full"),     // 2: write script fails
-    ];
+    ]);
 
     const result = await interact("https://example.com", [
       { type: "hover", selector: ".menu" },

@@ -88,14 +88,26 @@ export async function ensureVm(): Promise<{ running: boolean; error?: string }> 
     return { running: false, error: "smolvm not installed. Install: curl -sSL https://smolmachines.com/install.sh | bash" };
   }
 
-  // Check if machine already exists
+  // Check current VM status
   const status = await smolvmExec(["machine", "status", "--name", VM_NAME], 5_000);
 
   if (status.exitCode === 0 && status.stdout.includes("running")) {
     return { running: true };
   }
 
-  // Create the machine from Smolfile
+  // If VM exists but is stopped, just start it
+  if (status.exitCode === 0 && status.stdout.includes("stopped")) {
+    const startResult = await smolvmExec(
+      ["machine", "start", "--name", VM_NAME],
+      30_000
+    );
+    if (startResult.exitCode !== 0) {
+      return { running: false, error: `Failed to start VM: ${startResult.stderr}` };
+    }
+    return { running: true };
+  }
+
+  // VM doesn't exist — create it from Smolfile
   const smolfilePath = join(SMOLFILE_DIR, "browser.smolfile");
   if (!existsSync(smolfilePath)) {
     return { running: false, error: `Smolfile not found at ${smolfilePath}` };
@@ -110,7 +122,7 @@ export async function ensureVm(): Promise<{ running: boolean; error?: string }> 
     return { running: false, error: `Failed to create VM: ${createResult.stderr}` };
   }
 
-  // Start the machine
+  // Start the newly created machine
   const startResult = await smolvmExec(
     ["machine", "start", "--name", VM_NAME],
     30_000
@@ -137,15 +149,16 @@ export async function vmExec(
   command: string[],
   opts?: { timeout?: number; env?: Record<string, string> }
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const args = ["machine", "exec", "--name", VM_NAME, "--"];
+  // Build args in correct order: machine exec [--env K=V]... --name <name> -- <command>
+  const args: string[] = ["machine", "exec"];
 
   if (opts?.env) {
     for (const [key, value] of Object.entries(opts.env)) {
-      args.unshift("--env", `${key}=${value}`);
+      args.push("--env", `${key}=${value}`);
     }
   }
 
-  args.push(...command);
+  args.push("--name", VM_NAME, "--", ...command);
   return smolvmExec(args, opts?.timeout ?? 60_000);
 }
 

@@ -1,6 +1,6 @@
 # smolfier/browser.smolfile
 # Headless Chromium microVM for heavy-tier browser operations
-# Uses alpine:edge with Chromium installed
+# Alpine + Node.js + Puppeteer for full browser automation
 
 image = "alpine:edge"
 
@@ -10,9 +10,15 @@ net = true
 
 env = [
     "CHROME_BIN=/usr/bin/chromium",
+    "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium",
+    "PUPPETEER_SKIP_DOWNLOAD=true",
+    "NODE_PATH=/usr/lib/node_modules",
 ]
 
 [dev]
 init = [
-    "apk add --no-cache chromium font-opensans",
+    # Browser engine + fonts + Node.js runtime
+    "apk add --no-cache chromium font-opensans nodejs npm",
+    # Puppeteer (uses system Chromium, no download)
+    "npm install -g puppeteer-core@latest",
 ]

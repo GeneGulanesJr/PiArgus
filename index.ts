@@ -5,7 +5,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 
 // Light tier
 import {
@@ -123,9 +122,10 @@ export default async function (pi: ExtensionAPI) {
     parameters: Type.Object({
       url: Type.String({ description: "URL to fetch" }),
       mode: Type.Optional(
-        Type.String({
-          description: "Output mode: 'html' | 'text' | 'links' | 'eval'. Default: 'html'.",
-        })
+        Type.Union(
+          [Type.Literal("html"), Type.Literal("text"), Type.Literal("links"), Type.Literal("eval")],
+          { description: "Output mode: 'html' | 'text' | 'links' | 'eval'. Default: 'html'." }
+        )
       ),
       eval: Type.Optional(Type.String({ description: "JS expression (only with mode='eval')" })),
       wait_until: Type.Optional(
@@ -261,9 +261,20 @@ export default async function (pi: ExtensionAPI) {
     ],
     parameters: Type.Object({
       url: Type.String({ description: "URL of the page to act on" }),
-      action: Type.String({
-        description: "Action type: 'js' | 'navigate' | 'screenshot_info' | 'click' | 'fill' | 'hover' | 'wait_for'",
-      }),
+      action: Type.Union(
+        [
+          Type.Literal("js"),
+          Type.Literal("navigate"),
+          Type.Literal("screenshot_info"),
+          Type.Literal("click"),
+          Type.Literal("fill"),
+          Type.Literal("hover"),
+          Type.Literal("wait_for"),
+        ],
+        {
+          description: "Action type: 'js' | 'navigate' | 'screenshot_info' | 'click' | 'fill' | 'hover' | 'wait_for'",
+        }
+      ),
       expression: Type.Optional(Type.String({ description: "JavaScript expression (for 'js' action)" })),
       selector: Type.Optional(Type.String({ description: "CSS selector (for 'click', 'fill', 'hover', 'wait_for')" })),
       value: Type.Optional(Type.String({ description: "Value to type (for 'fill' action)" })),
@@ -330,7 +341,7 @@ export default async function (pi: ExtensionAPI) {
         }
       }
 
-      // ── Heavy tier (smolvm+Chromium) ──────────────────────────────────
+      // ── Heavy tier (smolvm+Chromium via puppeteer-core CDP) ────────────
       if (!isSmolvmInstalled()) {
         return {
           content: [{
@@ -341,62 +352,52 @@ export default async function (pi: ExtensionAPI) {
         };
       }
 
-      const ensure = await ensureVm();
-      if (!ensure.running) {
-        return {
-          content: [{ type: "text", text: `VM error: ${ensure.error}` }],
-          isError: true,
-        };
-      }
-
+      // Map the action to an InteractionAction
+      let interactionAction: import("./smolvm").InteractionAction;
       switch (params.action) {
-        case "click": {
-          const clickScript = `
-            const http = require('http');
-            // We can't use Puppeteer without installing it, so use chromium with custom protocol
-            // Instead, use a simpler approach: render the page and return info
-            console.log('Click action on: ${params.selector || `(${params.x}, ${params.y})`}');
-          `;
-          const result = await renderPage(params.url);
-          return {
-            content: [{
-              type: "text",
-              text: `Click executed on ${params.url}\n\nPage content after click:\n${truncate(result.stdout)}`,
-            }],
-            details: { tier, action: params.action },
-          };
-        }
-
-        case "fill": {
-          const result = await renderPage(params.url);
-          return {
-            content: [{
-              type: "text",
-              text: `Fill '${params.value}' into ${params.selector} on ${params.url}\n\nPage content:\n${truncate(result.stdout)}`,
-            }],
-            details: { tier, action: params.action },
-          };
-        }
-
+        case "click":
+          if (!params.selector && (params.x === undefined || params.y === undefined)) {
+            return { content: [{ type: "text", text: "click requires selector or x/y coordinates" }], isError: true };
+          }
+          interactionAction = params.selector
+            ? { type: "click", selector: params.selector }
+            : { type: "click", selector: `elementFromPoint(${params.x},${params.y})` };
+          break;
+        case "fill":
+          if (!params.selector || !params.value) {
+            return { content: [{ type: "text", text: "fill requires selector and value" }], isError: true };
+          }
+          interactionAction = { type: "fill", selector: params.selector, value: params.value };
+          break;
         case "hover":
-        case "wait_for": {
-          const result = await renderPage(params.url);
-          return {
-            content: [{
-              type: "text",
-              text: `Action '${params.action}' executed on ${params.url}\n\nPage content:\n${truncate(result.stdout)}`,
-            }],
-            details: { tier, action: params.action },
-          };
-        }
-
-        default: {
+          if (!params.selector) {
+            return { content: [{ type: "text", text: "hover requires selector" }], isError: true };
+          }
+          interactionAction = { type: "hover", selector: params.selector };
+          break;
+        case "wait_for":
+          if (!params.selector) {
+            return { content: [{ type: "text", text: "wait_for requires selector" }], isError: true };
+          }
+          interactionAction = { type: "wait_for", selector: params.selector };
+          break;
+        default:
           return {
             content: [{ type: "text", text: `Unknown heavy action: ${params.action}` }],
             isError: true,
           };
-        }
       }
+
+      const interactResult = await interact(params.url, [interactionAction], { stealth: params.stealth });
+
+      if (!interactResult.success) {
+        return { content: [{ type: "text", text: `Action failed: ${interactResult.error}` }], isError: true };
+      }
+
+      return {
+        content: [{ type: "text", text: truncate(interactResult.html || "Action completed (no HTML returned).") }],
+        details: { tier, action: params.action, selector: params.selector },
+      };
     },
   });
 
@@ -415,7 +416,12 @@ export default async function (pi: ExtensionAPI) {
       urls: Type.Array(Type.String(), { description: "List of URLs to scrape", minItems: 1 }),
       eval: Type.Optional(Type.String({ description: "JavaScript expression to evaluate on each page" })),
       concurrency: Type.Optional(Type.Number({ description: "Parallel workers. Default: 10.", default: 10 })),
-      format: Type.Optional(Type.String({ description: "Output format: 'json' | 'text'. Default: 'json'.", default: "json" })),
+      format: Type.Optional(
+        Type.Union(
+          [Type.Literal("json"), Type.Literal("text")],
+          { description: "Output format: 'json' | 'text'. Default: 'json'." }
+        )
+      ),
     }),
 
     async execute(_id, params) {
@@ -453,13 +459,13 @@ export default async function (pi: ExtensionAPI) {
   // ═══════════════════════════════════════════════════════════════════════════
 
   pi.registerTool({
-    name: "browser_obscura_serve",
+    name: "browser_vm_status",
     label: "Browser VM Status",
     description:
       "Check the status of the browser infrastructure. Reports Obscura (light tier) " +
       "and smolvm+Chromium (heavy tier) availability. " +
       "Pass action='start' to pre-warm the heavy-tier VM.",
-    promptSnippet: "Check browser VM status or pre-warm heavy tier",
+    promptSnippet: "Check browser infrastructure status or pre-warm heavy tier",
     promptGuidelines: [
       "Use action='status' to check what's available (default).",
       "Use action='start' to pre-warm the smolvm VM before heavy operations.",

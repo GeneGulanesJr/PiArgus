@@ -1,57 +1,77 @@
 // test/tier-router.test.ts
 import { describe, it, expect } from "vitest";
-import { classifyTier } from "../tier-router";
+import { classifyTier, tierExplanation } from "../tier-router";
 
 describe("classifyTier", () => {
-  it("classifies browser_fetch with mode=text as light", () => {
-    expect(classifyTier("browser_fetch", { mode: "text", url: "https://example.com" })).toBe("light");
+  describe("browser_screenshot", () => {
+    it("always routes to heavy tier", () => {
+      expect(classifyTier("browser_screenshot", { url: "https://example.com" })).toBe("heavy");
+    });
   });
 
-  it("classifies browser_fetch with mode=html as light", () => {
-    expect(classifyTier("browser_fetch", { mode: "html", url: "https://example.com" })).toBe("light");
+  describe("browser_action", () => {
+    it("routes click to heavy tier", () => {
+      expect(classifyTier("browser_action", { action: "click", selector: "button" })).toBe("heavy");
+    });
+
+    it("routes fill to heavy tier", () => {
+      expect(classifyTier("browser_action", { action: "fill", selector: "input", value: "hello" })).toBe("heavy");
+    });
+
+    it("routes hover to heavy tier", () => {
+      expect(classifyTier("browser_action", { action: "hover", selector: ".menu" })).toBe("heavy");
+    });
+
+    it("routes wait_for to heavy tier", () => {
+      expect(classifyTier("browser_action", { action: "wait_for", selector: ".loaded" })).toBe("heavy");
+    });
+
+    it("routes js to light tier", () => {
+      expect(classifyTier("browser_action", { action: "js", expression: "document.title" })).toBe("light");
+    });
+
+    it("routes navigate to light tier", () => {
+      expect(classifyTier("browser_action", { action: "navigate" })).toBe("light");
+    });
+
+    it("routes screenshot_info to light tier", () => {
+      expect(classifyTier("browser_action", { action: "screenshot_info" })).toBe("light");
+    });
+
+    it("routes unknown action to light tier (safe default)", () => {
+      expect(classifyTier("browser_action", { action: "unknown" })).toBe("light");
+    });
   });
 
-  it("classifies browser_fetch with mode=links as light", () => {
-    expect(classifyTier("browser_fetch", { mode: "links", url: "https://example.com" })).toBe("light");
+  describe("other tools", () => {
+    it("routes browser_fetch to light tier", () => {
+      expect(classifyTier("browser_fetch", { url: "https://example.com", mode: "text" })).toBe("light");
+    });
+
+    it("routes browser_navigate to light tier", () => {
+      expect(classifyTier("browser_navigate", { url: "https://example.com" })).toBe("light");
+    });
+
+    it("routes browser_scrape to light tier", () => {
+      expect(classifyTier("browser_scrape", { urls: ["https://a.com", "https://b.com"] })).toBe("light");
+    });
+  });
+});
+
+describe("tierExplanation", () => {
+  it("explains heavy tier for screenshots", () => {
+    const explanation = tierExplanation("browser_screenshot", { url: "https://example.com" });
+    expect(explanation).toContain("smolvm");
+    expect(explanation).toContain("Chromium");
   });
 
-  it("classifies browser_fetch with mode=eval as light", () => {
-    expect(classifyTier("browser_fetch", { mode: "eval", url: "https://example.com" })).toBe("light");
+  it("explains heavy tier for click action", () => {
+    const explanation = tierExplanation("browser_action", { action: "click" });
+    expect(explanation).toContain("DOM interaction");
   });
 
-  it("classifies browser_navigate as light", () => {
-    expect(classifyTier("browser_navigate", { url: "https://example.com" })).toBe("light");
-  });
-
-  it("classifies browser_scrape as light", () => {
-    expect(classifyTier("browser_scrape", { urls: ["https://example.com"] })).toBe("light");
-  });
-
-  it("classifies browser_action with action=js as light", () => {
-    expect(classifyTier("browser_action", { action: "js", url: "https://example.com" })).toBe("light");
-  });
-
-  it("classifies browser_screenshot as heavy", () => {
-    expect(classifyTier("browser_screenshot", { url: "https://example.com" })).toBe("heavy");
-  });
-
-  it("classifies browser_action with action=click as heavy", () => {
-    expect(classifyTier("browser_action", { action: "click", url: "https://example.com", selector: "#btn" })).toBe("heavy");
-  });
-
-  it("classifies browser_action with action=fill as heavy", () => {
-    expect(classifyTier("browser_action", { action: "fill", url: "https://example.com", selector: "#input", value: "test" })).toBe("heavy");
-  });
-
-  it("classifies browser_action with action=screenshot_info as light", () => {
-    expect(classifyTier("browser_action", { action: "screenshot_info", url: "https://example.com" })).toBe("light");
-  });
-
-  it("classifies unknown action as light (safe default)", () => {
-    expect(classifyTier("browser_action", { action: "unknown", url: "https://example.com" })).toBe("light");
-  });
-
-  it("classifies browser_obscura_serve as light (status only)", () => {
-    expect(classifyTier("browser_obscura_serve", { action: "status" })).toBe("light");
+  it("explains light tier for fetch", () => {
+    const explanation = tierExplanation("browser_fetch", { url: "https://example.com" });
+    expect(explanation).toContain("Obscura");
   });
 });

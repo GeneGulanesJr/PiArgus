@@ -30,13 +30,12 @@
   <text x="30" y="158" class="layer-label">Input</text>
   <text x="30" y="310" class="layer-label">Routing</text>
   <text x="30" y="468" class="layer-label">Execution</text>
-  <text x="30" y="588" class="layer-label">Target</text>
   <rect x="330" y="98" width="300" height="64" rx="12" fill="#a8c5e6" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
   <text x="480" y="128" text-anchor="middle" class="node-label">Pi Coding Agent</text>
   <text x="480" y="148" text-anchor="middle" class="node-detail">Invokes tools via Extension API</text>
   <rect x="300" y="211" width="360" height="68" rx="12" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
   <text x="480" y="237" text-anchor="middle" class="node-label">PiArgus Extension</text>
-  <text x="480" y="259" text-anchor="middle" class="node-detail">Registers 6 tools · Wraps CLI engines · Auto-cleanup VM on shutdown</text>
+  <text x="480" y="259" text-anchor="middle" class="node-detail">Registers 6 tools · CDP interactions · Auto-cleanup VM on shutdown</text>
   <polygon points="480,330 590,390 480,450 370,390"
            fill="#f4e4c1" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
   <text x="480" y="388" text-anchor="middle" class="node-label">Tier Router</text>
@@ -56,8 +55,8 @@
   <circle cx="724" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
   <circle cx="730" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
   <circle cx="736" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
-  <text x="730" y="518" text-anchor="middle" class="node-label">smolvm + Chromium</text>
-  <text x="730" y="540" text-anchor="middle" class="node-detail">microVM · GPU · Persistent</text>
+  <text x="730" y="518" text-anchor="middle" class="node-label">smolvm + Puppeteer</text>
+  <text x="730" y="540" text-anchor="middle" class="node-detail">Node.js · CDP · Chromium</text>
   <text x="730" y="560" text-anchor="middle" class="node-sub">HEAVY TIER</text>
   <line x1="480" y1="162" x2="480" y2="211" stroke="#5a5a5a" stroke-width="2" marker-end="url(#arrow)"/>
   <line x1="480" y1="279" x2="480" y2="330" stroke="#5a5a5a" stroke-width="2" marker-end="url(#arrow)"/>
@@ -76,7 +75,7 @@
   <text x="776" y="579" class="legend-text">Light tier (Obscura)</text>
   <line x1="734" y1="592" x2="762" y2="592" stroke="#b8952e" stroke-width="2"/>
   <polygon points="762,588 768,592 762,596" fill="#b8952e"/>
-  <text x="776" y="597" class="legend-text">Heavy tier (smolvm)</text>
+  <text x="776" y="597" class="legend-text">Heavy tier (CDP)</text>
   <line x1="734" y1="610" x2="762" y2="610" stroke="#5a5a5a" stroke-width="2"/>
   <polygon points="762,606 768,610 762,614" fill="#5a5a5a"/>
   <text x="776" y="615" class="legend-text">Control flow</text>

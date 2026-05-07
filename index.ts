@@ -28,7 +28,7 @@ import {
 } from "./smolvm";
 
 // Router
-import { classifyTier, tierExplanation } from "./tier-router";
+import { classifyTier } from "./tier-router";
 
 // Web search
 import { registerWebSearch } from "./web-search";
@@ -174,14 +174,14 @@ export default async function (pi: ExtensionAPI) {
     name: "browser_screenshot",
     label: "Browser Screenshot",
     description:
-      "Take a screenshot of a web page using Chromium inside a smolvm microVM. " +
-      "GPU-accelerated rendering via virtio-gpu. Returns the captured PNG. " +
+      "Take a screenshot of a web page using Puppeteer + Chromium inside a smolvm microVM. " +
+      "Returns the captured PNG. " +
       "The VM is lazily created on first use and reused for subsequent requests.",
     promptSnippet: "Take a screenshot of a web page",
     promptGuidelines: [
       "Use browser_screenshot to visually verify a page's state.",
       "Pass the URL directly — no need to navigate first.",
-      "Screenshots use Chromium in a hardware-isolated smolvm microVM.",
+      "Screenshots use Puppeteer + Chromium in a hardware-isolated smolvm microVM.",
       "First call may take a few seconds to boot the VM (sub-200ms on subsequent uses).",
     ],
     parameters: Type.Object({
@@ -361,7 +361,7 @@ export default async function (pi: ExtensionAPI) {
           }
           interactionAction = params.selector
             ? { type: "click", selector: params.selector }
-            : { type: "click", selector: `elementFromPoint(${params.x},${params.y})` };
+            : { type: "click_at", x: params.x!, y: params.y! };
           break;
         case "fill":
           if (!params.selector || !params.value) {
@@ -473,9 +473,6 @@ export default async function (pi: ExtensionAPI) {
     ],
     parameters: Type.Object({
       action: Type.Optional(Type.String({ description: "Action: 'status' | 'start'. Default: 'status'." })),
-      stealth: Type.Optional(Type.Boolean({ description: "No-op, kept for API compat. Default: false." })),
-      port: Type.Optional(Type.Number({ description: "No-op, kept for API compat. Default: 9222." })),
-      proxy: Type.Optional(Type.String({ description: "No-op, kept for API compat." })),
     }),
 
     async execute(_id, params) {

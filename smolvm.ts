@@ -18,6 +18,7 @@ const SMOLFILE_DIR = join(dirname(new URL(import.meta.url).pathname), "smolfier"
 /** Interaction action types for the heavy tier */
 export type InteractionAction =
   | { type: "click"; selector: string }
+  | { type: "click_at"; x: number; y: number }
   | { type: "fill"; selector: string; value: string }
   | { type: "hover"; selector: string }
   | { type: "wait_for"; selector: string; timeout?: number }
@@ -150,6 +151,28 @@ export async function vmExec(
 
 // ─── Screenshot ────────────────────────────────────────────────────────────
 
+/** Static screenshot script — no string interpolation of URL (injection-safe) */
+const SCREENSHOT_SCRIPT = `
+const puppeteer = require('puppeteer-core');
+const url = process.env.PIARGUS_URL;
+const width = parseInt(process.env.PIARGUS_WIDTH || '1280', 10);
+const height = parseInt(process.env.PIARGUS_HEIGHT || '800', 10);
+const fullPage = process.env.PIARGUS_FULL_PAGE === 'true';
+(async () => {
+  const browser = await puppeteer.launch({
+    executablePath: process.env.CHROME_BIN || '/usr/bin/chromium',
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+  const page = await browser.newPage();
+  await page.setViewport({ width, height });
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
+  await page.screenshot({ path: '/tmp/smolvm-screenshot.png', fullPage });
+  await browser.close();
+  console.log('OK');
+})().catch(e => { console.error(e.message); process.exit(1); });
+`.trim();
+
 /** Take a screenshot of a URL inside the VM using puppeteer-core */
 export async function screenshot(
   url: string,
@@ -161,34 +184,16 @@ export async function screenshot(
     return { path: outputPath, error: ensure.error };
   }
 
-  const width = opts?.width ?? 1280;
-  const height = opts?.height ?? 800;
-  const fullPage = opts?.fullPage ?? false;
+  const envVars: Record<string, string> = {
+    PIARGUS_URL: url,
+    PIARGUS_WIDTH: String(opts?.width ?? 1280),
+    PIARGUS_HEIGHT: String(opts?.height ?? 800),
+    PIARGUS_FULL_PAGE: String(opts?.fullPage ?? false),
+  };
 
-  // Generate a Node.js script that drives Chromium via puppeteer-core
-  const script = `
-const puppeteer = require('puppeteer-core');
-(async () => {
-  const browser = await puppeteer.launch({
-    executablePath: process.env.CHROME_BIN || '/usr/bin/chromium',
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
-  });
-  const page = await browser.newPage();
-  await page.setViewport({ width: ${width}, height: ${height} });
-  await page.goto('${url}', { waitUntil: 'networkidle2', timeout: 15000 });
-  await page.screenshot({
-    path: '/tmp/smolvm-screenshot.png',
-    fullPage: ${fullPage},
-  });
-  await browser.close();
-  console.log('OK');
-})();
-`.trim();
-
-  // Write script to VM and execute
+  // Write static script to VM (no user data interpolated — injection-safe)
   const writeResult = await vmExec(
-    ["sh", "-c", `cat > /tmp/screenshot.js << 'SCRIPT'\n${script}\nSCRIPT`],
+    ["sh", "-c", `cat > /tmp/screenshot.js << 'SCRIPT'\n${SCREENSHOT_SCRIPT}\nSCRIPT`],
     { timeout: 5_000 }
   );
 
@@ -196,7 +201,10 @@ const puppeteer = require('puppeteer-core');
     return { path: outputPath, error: `Failed to write screenshot script: ${writeResult.stderr}` };
   }
 
-  const nodeResult = await vmExec(["node", "/tmp/screenshot.js"], { timeout: 30_000 });
+  const nodeResult = await vmExec(["node", "/tmp/screenshot.js"], {
+    timeout: 30_000,
+    env: envVars,
+  });
 
   if (nodeResult.exitCode !== 0) {
     return { path: outputPath, error: `Screenshot failed: ${nodeResult.stderr || nodeResult.stdout}` };
@@ -220,33 +228,15 @@ const puppeteer = require('puppeteer-core');
 // ─── CDP interactions ──────────────────────────────────────────────────────
 
 /**
- * Perform one or more browser interactions on a page using puppeteer-core
- * inside the smolvm VM. Returns the final page HTML after all actions.
+ * Static interaction script — no string interpolation of URL or actions (injection-safe).
+ * All user-controlled data is passed via environment variables.
  */
-export async function interact(
-  url: string,
-  actions: InteractionAction[],
-  opts?: { timeout?: number; stealth?: boolean }
-): Promise<InteractionResult> {
-  const ensure = await ensureVm();
-  if (!ensure.running) {
-    return { success: false, error: ensure.error };
-  }
-
-  // Serialize actions to JSON for the Node.js script inside the VM
-  const actionsJson = JSON.stringify(actions)
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'");
-
-  const stealthSetup = opts?.stealth
-    ? `await page.evaluateOnNewDocument(() => { Object.defineProperty(navigator, 'webdriver', { get: () => false }); });`
-    : "";
-
-  const timeoutMs = (opts?.timeout ?? 15) * 1000;
-
-  const script = `
+const INTERACT_SCRIPT = `
 const puppeteer = require('puppeteer-core');
-const actions = JSON.parse('${actionsJson}');
+const url = process.env.PIARGUS_URL;
+const actions = JSON.parse(process.env.PIARGUS_ACTIONS);
+const stealth = process.env.PIARGUS_STEALTH === 'true';
+const timeoutMs = parseInt(process.env.PIARGUS_TIMEOUT || '15000', 10);
 (async () => {
   const browser = await puppeteer.launch({
     executablePath: process.env.CHROME_BIN || '/usr/bin/chromium',
@@ -254,14 +244,22 @@ const actions = JSON.parse('${actionsJson}');
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
   const page = await browser.newPage();
-  ${stealthSetup}
-  await page.goto('${url}', { waitUntil: 'networkidle2', timeout: ${timeoutMs} });
+  if (stealth) {
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    });
+  }
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
   for (const action of actions) {
     switch (action.type) {
       case 'click':
         await page.waitForSelector(action.selector, { timeout: 5000 });
         await page.click(action.selector);
+        await page.waitForNetworkIdle({ timeout: 3000 }).catch(() => {});
+        break;
+      case 'click_at':
+        await page.mouse.click(action.x, action.y);
         await page.waitForNetworkIdle({ timeout: 3000 }).catch(() => {});
         break;
       case 'fill':
@@ -288,12 +286,38 @@ const actions = JSON.parse('${actionsJson}');
   const html = await page.content();
   await browser.close();
   process.stdout.write(html);
-})();
+})().catch(e => { console.error(e.message); process.exit(1); });
 `.trim();
 
-  // Write the interaction script into the VM
+/**
+ * Perform one or more browser interactions on a page using puppeteer-core
+ * inside the smolvm VM. Returns the final page HTML after all actions.
+ *
+ * URL and actions are passed via environment variables (injection-safe —
+ * no string interpolation of user-controlled data into the script).
+ */
+export async function interact(
+  url: string,
+  actions: InteractionAction[],
+  opts?: { timeout?: number; stealth?: boolean }
+): Promise<InteractionResult> {
+  const ensure = await ensureVm();
+  if (!ensure.running) {
+    return { success: false, error: ensure.error };
+  }
+
+  const timeoutMs = (opts?.timeout ?? 15) * 1000;
+
+  const envVars: Record<string, string> = {
+    PIARGUS_URL: url,
+    PIARGUS_ACTIONS: JSON.stringify(actions),
+    PIARGUS_STEALTH: String(opts?.stealth ?? false),
+    PIARGUS_TIMEOUT: String(timeoutMs),
+  };
+
+  // Write static script to VM (no user data interpolated — injection-safe)
   const writeResult = await vmExec(
-    ["sh", "-c", `cat > /tmp/interact.js << 'SCRIPT'\n${script}\nSCRIPT`],
+    ["sh", "-c", `cat > /tmp/interact.js << 'SCRIPT'\n${INTERACT_SCRIPT}\nSCRIPT`],
     { timeout: 5_000 }
   );
 
@@ -303,6 +327,7 @@ const actions = JSON.parse('${actionsJson}');
 
   const nodeResult = await vmExec(["node", "/tmp/interact.js"], {
     timeout: timeoutMs,
+    env: envVars,
   });
 
   if (nodeResult.exitCode !== 0) {

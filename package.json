@@ -12,7 +12,8 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*",
@@ -20,7 +21,8 @@
   },
   "devDependencies": {
     "vitest": "^3.0.0",
-    "tsx": "^4.0.0"
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
   },
   "pi": {
     "extensions": ["./index.ts"],

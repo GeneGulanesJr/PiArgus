@@ -64,6 +64,6 @@ npm test
 | `browser_fetch` | Light | Fetch page as text/html/links/eval |
 | `browser_navigate` | Light | Navigate & get page metadata |
 | `browser_scrape` | Light | Bulk parallel scraping |
-| `browser_screenshot` | Heavy | Full-page screenshots via Chromium |
-| `browser_action` | Dual | JS eval (light) or click/fill/hover (heavy) |
-| `browser_obscura_serve` | Both | Status check / pre-warm heavy VM |
+| `browser_screenshot` | Heavy | Full-page screenshots via Puppeteer + Chromium |
+| `browser_action` | Dual | JS eval (light) or click/fill/hover (heavy) via CDP |
+| `browser_vm_status` | Both | Status check / pre-warm heavy VM |

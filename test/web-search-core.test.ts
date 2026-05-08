@@ -132,7 +132,59 @@ describe("searchSearXNG", () => {
     expect(url).toContain("custom:9999");
     delete process.env.SEARXNG_URL;
   });
+
+  it("falls back to HTML scraping when JSON API returns 403", async () => {
+    // First call returns 403, second call returns HTML
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: "Forbidden",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(SearXNG_HTML_RESPONSE),
+      });
+
+    const result = await searchSearXNG("test query", {});
+    expect(result.results.length).toBeGreaterThan(0);
+    expect(result.results[0].title).toBe("Speedtest by Ookla - The Global Broadband Speed Test");
+    expect(result.results[0].url).toBe("https://www.speedtest.net/");
+    expect(result.results[0].snippet).toContain("Speedtest is better");
+    expect(result.results[0].engines).toContain("google");
+  });
 });
+
+// Sample SearXNG HTML response for fallback testing
+const SearXNG_HTML_RESPONSE = `
+<html><body>
+<article class="result">
+  <a href="https://www.speedtest.net/" class="url_header" rel="noreferrer">
+    <div class="url_wrapper"><span class="url_o1"><span class="url_i1">https://www.speedtest.net</span></span></div>
+  </a>
+  <h3><a href="https://www.speedtest.net/" rel="noreferrer">Speedtest by Ookla - The Global Broadband Speed <span class="highlight">Test</span></a></h3>
+  <p class="content">
+    Speedtest is better with the app. Download the Speedtest app for more metrics, video testing, mobile coverage maps.
+  </p>
+  <div class="engines">
+    <span>google</span><span>duckduckgo</span>
+  </div>
+</article>
+<article class="result">
+  <a href="https://example.com/" class="url_header" rel="noreferrer">
+    <div class="url_wrapper"><span class="url_o1"><span class="url_i1">https://example.com</span></span></div>
+  </a>
+  <h3><a href="https://example.com/" rel="noreferrer">Example Domain</a></h3>
+  <p class="content">
+    This domain is for use in documentation examples without needing permission.
+  </p>
+  <div class="engines">
+    <span>google</span>
+  </div>
+</article>
+</body></html>
+`;
 
 describe("formatResults", () => {
   it("formats results as markdown with numbered entries", () => {

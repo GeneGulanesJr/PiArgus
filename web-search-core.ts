@@ -118,20 +118,31 @@ export async function searchSearXNG(
 function parseHtmlResults(html: string): SearchResult[] {
   const results: SearchResult[] = [];
 
-  // SearXNG wraps each result in an <article class="result"> with data attributes
-  const resultRegex = /<article[^>]*class="result"[^>]*>([\s\S]*?)<\/article>/gi;
-  const urlRegex = /<a[^>]*href="([^"]+)"[^>]*class="url_header"[^>]*>([\s\S]*?)<\/a>/i;
-  const snippetRegex = /<p[^>]*class="[^"]*result-content[^"]*"[^>]*>([\s\S]*?)<\/p>/i;
-  const engineRegex = /<span[^>]*class="[^"]*engine[^"]*"[^>]*>([\s\S]*?)<\/span>/gi;
+  // SearXNG wraps each result in an <article class="result">
+  const resultRegex = /<article[^>]*class="result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
+  // URL from <a class="url_header" href="...">
+  const urlHeaderRegex = /<a[^>]*href="([^"]+)"[^>]*class="url_header"[^>]*>/;
+  // Title from <h3><a href="...">Title</a></h3>
+  const titleRegex = /<h3[^>]*><a[^>]*href="[^"]+"[^>]*>([\s\S]*?)<\/a><\/h3>/i;
+  // Snippet from <p class="content">...</p>
+  const snippetRegex = /<p[^>]*class="content"[^>]*>([\s\S]*?)<\/p>/i;
+  // Engines from <span>google</span> inside <div class="engines">
+  const engineRegex = /<div[^>]*class="engines"[^>]*>([\s\S]*?)<\/div>/i;
+  const engineSpanRegex = /<span>([\s\S]*?)<\/span>/gi;
 
   let match: RegExpExecArray | null;
   while ((match = resultRegex.exec(html)) !== null) {
     const block = match[1];
 
-    // Extract URL and title
-    const urlMatch = urlRegex.exec(block) || /<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
-    const title = urlMatch ? decodeHtmlEntities(urlMatch[2].replace(/<[^>]+>/g, "").trim()) : "";
+    // Extract URL from url_header link
+    const urlMatch = urlHeaderRegex.exec(block);
     const url = urlMatch ? urlMatch[1] : "";
+
+    // Extract title
+    const titleMatch = titleRegex.exec(block);
+    const title = titleMatch
+      ? decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, "").trim())
+      : "";
 
     // Extract snippet/content
     const snippetMatch = snippetRegex.exec(block);
@@ -141,11 +152,15 @@ function parseHtmlResults(html: string): SearchResult[] {
 
     // Extract engine names
     const engines: string[] = [];
-    let engMatch: RegExpExecArray | null;
-    while ((engMatch = engineRegex.exec(block)) !== null) {
-      engines.push(engMatch[1].replace(/<[^>]+>/g, "").trim());
+    const enginesBlock = engineRegex.exec(block);
+    if (enginesBlock) {
+      let engMatch: RegExpExecArray | null;
+      while ((engMatch = engineSpanRegex.exec(enginesBlock[1])) !== null) {
+        const name = engMatch[1].replace(/<[^>]+>/g, "").trim();
+        if (name) engines.push(name);
+      }
+      engineSpanRegex.lastIndex = 0;
     }
-    engineRegex.lastIndex = 0;
 
     if (url && title) {
       results.push({ title, url, snippet, engines });
@@ -155,7 +170,7 @@ function parseHtmlResults(html: string): SearchResult[] {
   // Fallback: try a simpler parser for different SearXNG themes
   if (results.length === 0) {
     const simpleLinkRegex = /<h3[^>]*><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h3>/gi;
-    const simpleSnippetRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+    const simpleSnippetRegex = /<p[^>]*class="content"[^>]*>([\s\S]*?)<\/p>/gi;
     const links: Array<{ url: string; title: string }> = [];
 
     let linkMatch: RegExpExecArray | null;

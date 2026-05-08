@@ -13,6 +13,7 @@ env = [
     "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium",
     "PUPPETEER_SKIP_DOWNLOAD=true",
     "NODE_PATH=/usr/local/lib/node_modules",
+    "HOME=/root",
 ]
 
 [dev]
@@ -21,4 +22,6 @@ init = [
     "apk add --no-cache chromium font-opensans nodejs npm",
     # Puppeteer (uses system Chromium, no download)
     "npm install -g puppeteer-core@latest",
+    # Ensure writable dirs for Chromium runtime
+    "mkdir -p /root /tmp/chrome-user-data",
 ]

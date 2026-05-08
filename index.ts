@@ -25,6 +25,9 @@ import {
   screenshot as smolvmScreenshot,
   interact,
   getVmStatus,
+  stopSearchVm,
+  getSearchVmStatus,
+  SEARXNG_LOCAL_URL,
 } from "./smolvm";
 
 // Router
@@ -50,9 +53,10 @@ function truncate(content: string): string {
 
 export default async function (pi: ExtensionAPI) {
 
-  // Auto-stop smolvm VM on session shutdown
+  // Auto-stop smolvm VMs on session shutdown
   pi.on("session_shutdown", async () => {
     try { await stopVm(); } catch { /* best-effort */ }
+    try { await stopSearchVm(); } catch { /* best-effort */ }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -508,6 +512,7 @@ export default async function (pi: ExtensionAPI) {
 
       // Status check
       const vmState = smolvmOk ? await getVmStatus() : "not-installed" as const;
+      const searchVmState = smolvmOk ? await getSearchVmStatus() : "not-installed" as const;
 
       return {
         content: [{
@@ -521,12 +526,17 @@ export default async function (pi: ExtensionAPI) {
             `   smolvm installed: ${smolvmOk ? "✅" : "❌"}\n` +
             `   VM state: ${vmState}\n` +
             `   Use for: screenshots, clicks, form fills, CDP automation\n\n` +
+            `🔎 Search Tier (smolvm + SearXNG)\n` +
+            `   VM state: ${searchVmState}\n` +
+            `   SearXNG URL: ${process.env.SEARXNG_URL || SEARXNG_LOCAL_URL}\n` +
+            `   JSON format: ✅ enabled\n\n` +
             `💡 Tip: Call with action='start' to pre-warm the heavy tier.`,
         }],
         details: {
           obscuraInstalled: obscuraOk,
           smolvmInstalled: smolvmOk,
           vmState,
+          searchVmState,
         },
       };
     },

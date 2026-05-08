@@ -34,7 +34,9 @@ interface SearXNGJsonResponse {
 }
 
 function getSearXNGUrl(): string {
-  return process.env.SEARXNG_URL || "http://192.168.100.105:30053";
+  // If SEARXNG_URL is explicitly set, respect it (allows pointing to any SearXNG instance)
+  // Otherwise default to the local smolvm search VM on port 8888
+  return process.env.SEARXNG_URL || "http://localhost:8888";
 }
 
 export const DEFAULT_MAX_RESULTS = 10;

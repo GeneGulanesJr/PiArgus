@@ -1,0 +1,33 @@
+# smolfier/search.smolfile
+# SearXNG metasearch engine microVM — lazy-loaded on first web search
+# Uses the official SearXNG Docker image with JSON format enabled
+#
+# Architecture:
+#   - smolvm's init system kills background processes when sessions end
+#   - So Granian (SearXNG ASGI server) is NOT started here
+#   - Instead, smolvm.ts starts Granian via a persistent exec session
+#   - This smolfile only writes settings.yml on VM start
+#
+# NOTE: First-time startup pulls the image (~100MB). Subsequent starts are fast.
+
+image = "docker.io/searxng/searxng:latest"
+
+cpus = 2
+memory = 1024
+net = true
+
+# Expose SearXNG: host 8888 → VM 8080 (Granian listens on 8080)
+ports = ["8888:8080"]
+
+# SearXNG reads these env vars on startup
+env = [
+    "SEARXNG_SECRET=piargus-search-2026",
+    "SEARXNG_BASE_URL=http://localhost:8888/",
+    "SEARXNG_PORT=8080",
+]
+
+[dev]
+init = [
+    # Write settings.yml with JSON format enabled (runs on every VM start)
+    "printf 'use_default_settings: true\\nsearch:\\n  safe_search: 0\\n  formats:\\n    - html\\n    - json\\nserver:\\n  limiter: false\\n  image_proxy: false\\n  secret_key: piargus-search-2026\\nvalkey:\\n  url: false\\n' > /etc/searxng/settings.yml",
+]

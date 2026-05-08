@@ -1,11 +1,13 @@
 // web-search.ts — SearXNG search tool registration for PiArgus
 //
 // This thin wrapper imports the pure logic from web-search-core.ts and binds it
-// to Pi's ExtensionAPI / TypeBox schema layer.
+// to Pi's ExtensionAPI / TypeBox schema layer. It also auto-ensures the SearXNG
+// search VM is running before each search (lazy-loaded smolvm).
 
 import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { searchSearXNG, formatResults, DEFAULT_MAX_RESULTS, type SearchResponse } from "./web-search-core";
+import { ensureSearchVm, SEARXNG_LOCAL_URL, isSmolvmInstalled } from "./smolvm";
 
 export { searchSearXNG, formatResults, DEFAULT_MAX_RESULTS } from "./web-search-core";
 export type { SearchResult, SearchResponse } from "./web-search-core";
@@ -80,7 +82,26 @@ export function registerWebSearch(pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal) {
-      const baseUrl = process.env.SEARXNG_URL || "http://192.168.100.105:30053";
+      const configuredUrl = process.env.SEARXNG_URL;
+      const useLocalSmolvm = !configuredUrl || configuredUrl === SEARXNG_LOCAL_URL;
+      let searxngUrl = configuredUrl || SEARXNG_LOCAL_URL;
+
+      // Auto-ensure the SearXNG search VM if using the local smolvm instance
+      if (useLocalSmolvm && isSmolvmInstalled()) {
+        const ensure = await ensureSearchVm();
+        if (!ensure.running) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Failed to start SearXNG search VM: ${ensure.error}\n` +
+                `Set SEARXNG_URL to point to an external SearXNG instance, or install smolvm.`,
+            }],
+            details: { query: params.query, error: ensure.error },
+            isError: true,
+          };
+        }
+        searxngUrl = ensure.url || SEARXNG_LOCAL_URL;
+      }
 
       try {
         const searchResult = await searchSearXNG(params.query, {
@@ -111,7 +132,7 @@ export function registerWebSearch(pi: ExtensionAPI) {
           content: [{
             type: "text" as const,
             text: isTimeout
-              ? `Web search timed out for "${params.query}". The SearXNG instance at ${baseUrl} may be slow or unreachable. Try a simpler query or check the server.`
+              ? `Web search timed out for "${params.query}". The SearXNG instance at ${searxngUrl} may be slow or unreachable. Try a simpler query or check the server.`
               : `Web search failed for "${params.query}": ${message}`,
           }],
           details: { query: params.query, error: message },

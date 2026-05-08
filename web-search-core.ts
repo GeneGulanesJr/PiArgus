@@ -1,4 +1,4 @@
-// web-search-core.ts — Pure SearXNG search logic using JSON API (no HTML scraping)
+// web-search-core.ts — SearXNG search with JSON API primary + HTML fallback
 
 export interface SearchResult {
   title: string;
@@ -84,11 +84,16 @@ export async function searchSearXNG(
     signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
   });
 
+  // If JSON API is disabled (403), fall back to HTML scraping
+  if (response.status === 403) {
+    return searchSearXNGHtml(query, options, maxResults);
+  }
+
   if (!response.ok) {
     throw new Error(`SearXNG returned HTTP ${response.status}: ${response.statusText}`);
   }
 
-  const json = await response.json() as SearXNGJsonResponse;
+  const json = (await response.json()) as SearXNGJsonResponse;
   const rawResults = json.results || [];
 
   // Slice and map JSON API's "content" → our "snippet"
@@ -103,6 +108,139 @@ export async function searchSearXNG(
   return {
     results,
     totalResults: json.number_of_results ?? results.length,
+    query,
+  };
+}
+
+// ─── HTML scraping fallback ──────────────────────────────────────────────────
+
+/** Parse SearXNG HTML search results into SearchResult[] */
+function parseHtmlResults(html: string): SearchResult[] {
+  const results: SearchResult[] = [];
+
+  // SearXNG wraps each result in an <article class="result"> with data attributes
+  const resultRegex = /<article[^>]*class="result"[^>]*>([\s\S]*?)<\/article>/gi;
+  const urlRegex = /<a[^>]*href="([^"]+)"[^>]*class="url_header"[^>]*>([\s\S]*?)<\/a>/i;
+  const snippetRegex = /<p[^>]*class="[^"]*result-content[^"]*"[^>]*>([\s\S]*?)<\/p>/i;
+  const engineRegex = /<span[^>]*class="[^"]*engine[^"]*"[^>]*>([\s\S]*?)<\/span>/gi;
+
+  let match: RegExpExecArray | null;
+  while ((match = resultRegex.exec(html)) !== null) {
+    const block = match[1];
+
+    // Extract URL and title
+    const urlMatch = urlRegex.exec(block) || /<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
+    const title = urlMatch ? decodeHtmlEntities(urlMatch[2].replace(/<[^>]+>/g, "").trim()) : "";
+    const url = urlMatch ? urlMatch[1] : "";
+
+    // Extract snippet/content
+    const snippetMatch = snippetRegex.exec(block);
+    const snippet = snippetMatch
+      ? decodeHtmlEntities(snippetMatch[1].replace(/<[^>]+>/g, "").trim())
+      : "";
+
+    // Extract engine names
+    const engines: string[] = [];
+    let engMatch: RegExpExecArray | null;
+    while ((engMatch = engineRegex.exec(block)) !== null) {
+      engines.push(engMatch[1].replace(/<[^>]+>/g, "").trim());
+    }
+    engineRegex.lastIndex = 0;
+
+    if (url && title) {
+      results.push({ title, url, snippet, engines });
+    }
+  }
+
+  // Fallback: try a simpler parser for different SearXNG themes
+  if (results.length === 0) {
+    const simpleLinkRegex = /<h3[^>]*><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h3>/gi;
+    const simpleSnippetRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+    const links: Array<{ url: string; title: string }> = [];
+
+    let linkMatch: RegExpExecArray | null;
+    while ((linkMatch = simpleLinkRegex.exec(html)) !== null) {
+      links.push({
+        url: linkMatch[1],
+        title: decodeHtmlEntities(linkMatch[2].replace(/<[^>]+>/g, "").trim()),
+      });
+    }
+
+    // Match snippets by position
+    const snippets: string[] = [];
+    let snipMatch: RegExpExecArray | null;
+    while ((snipMatch = simpleSnippetRegex.exec(html)) !== null) {
+      const text = snipMatch[1].replace(/<[^>]+>/g, "").trim();
+      if (text.length > 20) snippets.push(decodeHtmlEntities(text));
+    }
+
+    for (let i = 0; i < Math.min(links.length, 10); i++) {
+      results.push({
+        title: links[i].title,
+        url: links[i].url,
+        snippet: snippets[i] || "",
+        engines: [],
+      });
+    }
+  }
+
+  return results;
+}
+
+/** Decode common HTML entities */
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+/** Fallback: scrape SearXNG HTML when JSON API is disabled (403) */
+async function searchSearXNGHtml(
+  query: string,
+  options: {
+    categories?: string;
+    language?: string;
+    timeRange?: string;
+    maxResults?: number;
+    pageno?: number;
+  },
+  maxResults: number
+): Promise<SearchResponse> {
+  const baseUrl = getSearXNGUrl();
+
+  const params = new URLSearchParams();
+  params.set("q", query);
+  params.set("format", "html");  // Explicit HTML format
+  params.set("safesearch", "0");
+  if (options.language) params.set("language", options.language);
+  if (options.categories) params.set("categories", options.categories);
+  else params.set("category_general", "1");
+  if (options.timeRange) params.set("time_range", options.timeRange);
+  if (options.pageno && options.pageno > 1) params.set("pageno", String(options.pageno));
+
+  const response = await fetch(`${baseUrl}/search?${params.toString()}`, {
+    headers: {
+      "Accept": "text/html",
+      "User-Agent": "PiArgus/2.0 (Web Search Tool)",
+    },
+    signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SearXNG HTML fallback returned HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const html = await response.text();
+  const results = parseHtmlResults(html).slice(0, maxResults);
+
+  return {
+    results,
+    totalResults: results.length,
     query,
   };
 }

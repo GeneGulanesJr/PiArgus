@@ -162,6 +162,9 @@ export async function vmExec(
   return smolvmExec(args, opts?.timeout ?? 60_000);
 }
 
+/** NODE_PATH for global npm modules inside the VM */
+const NODE_PATH = "/usr/local/lib/node_modules";
+
 // ─── Screenshot ────────────────────────────────────────────────────────────
 
 /** Static screenshot script — no string interpolation of URL (injection-safe) */
@@ -175,7 +178,7 @@ const fullPage = process.env.PIARGUS_FULL_PAGE === 'true';
   const browser = await puppeteer.launch({
     executablePath: process.env.CHROME_BIN || '/usr/bin/chromium',
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-pipe'],
   });
   const page = await browser.newPage();
   await page.setViewport({ width, height });
@@ -198,6 +201,7 @@ export async function screenshot(
   }
 
   const envVars: Record<string, string> = {
+    NODE_PATH,
     PIARGUS_URL: url,
     PIARGUS_WIDTH: String(opts?.width ?? 1280),
     PIARGUS_HEIGHT: String(opts?.height ?? 800),
@@ -254,7 +258,7 @@ const timeoutMs = parseInt(process.env.PIARGUS_TIMEOUT || '15000', 10);
   const browser = await puppeteer.launch({
     executablePath: process.env.CHROME_BIN || '/usr/bin/chromium',
     headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-pipe'],
   });
   const page = await browser.newPage();
   if (stealth) {
@@ -322,6 +326,7 @@ export async function interact(
   const timeoutMs = (opts?.timeout ?? 15) * 1000;
 
   const envVars: Record<string, string> = {
+    NODE_PATH,
     PIARGUS_URL: url,
     PIARGUS_ACTIONS: JSON.stringify(actions),
     PIARGUS_STEALTH: String(opts?.stealth ?? false),

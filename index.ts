@@ -116,8 +116,9 @@ export default async function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use browser_fetch when you need to read a web page's content.",
       "mode='text' for quick reading, mode='links' for all URLs, mode='html' for full markup.",
-      "mode='eval' runs a JS expression and returns the result.",
+      "mode='eval' runs a JS expression and returns the result — always JSON.stringify your result in eval.",
       "Use stealth for anti-detection when scraping sites that block bots.",
+      "Light tier (Obscura) is stateless — each fetch is a fresh page, no cookies persist between calls.",
     ],
     parameters: Type.Object({
       url: Type.String({ description: "URL to fetch" }),
@@ -183,6 +184,8 @@ export default async function (pi: ExtensionAPI) {
       "Pass the URL directly — no need to navigate first.",
       "Screenshots use Puppeteer + Chromium in a hardware-isolated smolvm microVM.",
       "First call may take a few seconds to boot the VM (sub-200ms on subsequent uses).",
+      "Heavy-tier VM is reused between calls and stops automatically on session shutdown.",
+      "If smolvm is not installed, heavy-tier calls return a clear install message.",
     ],
     parameters: Type.Object({
       url: Type.String({ description: "URL to screenshot" }),
@@ -258,6 +261,7 @@ export default async function (pi: ExtensionAPI) {
       "Use action='click' to click an element (smolvm+Chromium — full DOM).",
       "Use action='fill' to fill a form field (smolvm+Chromium — full DOM).",
       "Use action='screenshot_info' to get viewport dimensions (Obscura — fast).",
+      "Always JSON.stringify your result in JS eval expressions — eval returns strings.",
     ],
     parameters: Type.Object({
       url: Type.String({ description: "URL of the page to act on" }),

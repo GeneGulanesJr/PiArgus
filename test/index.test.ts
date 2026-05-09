@@ -60,8 +60,8 @@ describe("PiArgus extension registration", () => {
   });
 
   it("registers 6 browser tools plus delegates WEB_Search and WEB_Research", () => {
-    // 6 tools registered directly in index.ts
-    expect(mockPi.registerTool).toHaveBeenCalledTimes(6);
+    // 6 browser tools + 2 pidocs tools registered directly in index.ts
+    expect(mockPi.registerTool).toHaveBeenCalledTimes(8);
     // WEB_Search and WEB_Research are registered via registerWebSearch/registerWebResearch
     expect(mockRegisterWebSearch).toHaveBeenCalledWith(mockPi);
     expect(mockRegisterWebResearch).toHaveBeenCalledWith(mockPi);

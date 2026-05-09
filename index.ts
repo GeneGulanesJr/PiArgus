@@ -36,6 +36,9 @@ import { classifyTier } from "./tier-router";
 // Web search
 import { registerWebSearch, registerWebResearch } from "./web-search";
 
+// PiDocs
+import { registerPidocs } from "./pidocs";
+
 // Types
 import type { BrowserTier } from "./types";
 
@@ -65,6 +68,12 @@ export default async function (pi: ExtensionAPI) {
 
   registerWebSearch(pi);
   registerWebResearch(pi);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOL: PiDocs (package/app documentation & install resolver)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  registerPidocs(pi);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TOOL: browser_navigate (LIGHT — Obscura)

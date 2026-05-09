@@ -1,14 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 720" width="1080" height="720">
 <style>
   text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif; }
-  .title { font-size: 20px; font-weight: 700; fill: #1a1a1a; }
-  .node-label { font-size: 16px; font-weight: 600; fill: #1a1a1a; }
-  .node-detail { font-size: 13px; fill: #5a5a5a; }
-  .node-sub { font-size: 12px; fill: #6a6a6a; }
-  .layer-label { font-size: 14px; font-weight: 600; fill: #6a6a6a; }
-  .arrow-label { font-size: 13px; fill: #5a5a5a; }
-  .legend-text { font-size: 12px; fill: #5a5a5a; }
-  .legend-title { font-size: 13px; font-weight: 600; fill: #1a1a1a; }
+  .title { font-size: 22px; font-weight: 700; fill: #1a1a1a; }
+  .node-label { font-size: 15px; font-weight: 600; fill: #1a1a1a; }
+  .node-detail { font-size: 12px; fill: #5a5a5a; }
+  .node-sub { font-size: 11px; fill: #6a6a6a; }
+  .layer-label { font-size: 13px; font-weight: 600; fill: #6a6a6a; }
+  .arrow-label { font-size: 12px; fill: #5a5a5a; }
+  .legend-text { font-size: 11px; fill: #5a5a5a; }
+  .legend-title { font-size: 12px; font-weight: 600; fill: #1a1a1a; }
+  .tool-label { font-size: 12px; font-weight: 500; fill: #1a1a1a; }
+  .tool-detail { font-size: 10px; fill: #6a6a6a; }
 </style>
 <defs>
   <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
@@ -20,63 +22,145 @@
   <marker id="arrow-gold" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
     <polygon points="0 0, 8 4, 0 8" fill="#b8952e"/>
   </marker>
+  <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <polygon points="0 0, 8 4, 0 8" fill="#5b7ba5"/>
+  </marker>
+  <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <polygon points="0 0, 8 4, 0 8" fill="#7c5cbf"/>
+  </marker>
   <filter id="shadow">
     <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#00000010"/>
   </filter>
 </defs>
-<rect width="960" height="640" fill="#f8f6f3"/>
-  <text x="480" y="38" text-anchor="middle" class="title">PiArgus — Tiered Browser Architecture</text>
-  <text x="480" y="58" text-anchor="middle" class="node-sub">Argus Panoptes, the hundred-eyed giant — sees all, routes wisely</text>
-  <text x="30" y="158" class="layer-label">Input</text>
-  <text x="30" y="310" class="layer-label">Routing</text>
-  <text x="30" y="468" class="layer-label">Execution</text>
-  <rect x="330" y="98" width="300" height="64" rx="12" fill="#a8c5e6" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
-  <text x="480" y="128" text-anchor="middle" class="node-label">Pi Coding Agent</text>
-  <text x="480" y="148" text-anchor="middle" class="node-detail">Invokes tools via Extension API</text>
-  <rect x="300" y="211" width="360" height="68" rx="12" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
-  <text x="480" y="237" text-anchor="middle" class="node-label">PiArgus Extension</text>
-  <text x="480" y="259" text-anchor="middle" class="node-detail">Registers 6 tools · CDP interactions · Auto-cleanup VM on shutdown</text>
-  <polygon points="480,330 590,390 480,450 370,390"
-           fill="#f4e4c1" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
-  <text x="480" y="388" text-anchor="middle" class="node-label">Tier Router</text>
-  <text x="480" y="408" text-anchor="middle" class="node-sub" fill="#5a5a5a">classifyTier()</text>
-  <rect x="105" y="485" width="250" height="90" rx="12" fill="#a8c5e6" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
-  <rect x="105" y="485" width="250" height="22" rx="12" fill="#93b5d9"/>
-  <rect x="105" y="496" width="250" height="11" fill="#93b5d9"/>
-  <circle cx="224" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
-  <circle cx="230" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
-  <circle cx="236" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
-  <text x="230" y="518" text-anchor="middle" class="node-label">Obscura</text>
-  <text x="230" y="540" text-anchor="middle" class="node-detail">V8 · 30MB · Stateless</text>
-  <text x="230" y="560" text-anchor="middle" class="node-sub">LIGHT TIER</text>
-  <rect x="605" y="485" width="250" height="90" rx="12" fill="#f4e4c1" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
-  <rect x="605" y="485" width="250" height="22" rx="12" fill="#ebd19b"/>
-  <rect x="605" y="496" width="250" height="11" fill="#ebd19b"/>
-  <circle cx="724" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
-  <circle cx="730" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
-  <circle cx="736" cy="496" r="2.5" fill="#4a4a4a" opacity="0.5"/>
-  <text x="730" y="518" text-anchor="middle" class="node-label">smolvm + Puppeteer</text>
-  <text x="730" y="540" text-anchor="middle" class="node-detail">Node.js · CDP · Chromium</text>
-  <text x="730" y="560" text-anchor="middle" class="node-sub">HEAVY TIER</text>
-  <line x1="480" y1="162" x2="480" y2="211" stroke="#5a5a5a" stroke-width="2" marker-end="url(#arrow)"/>
-  <line x1="480" y1="279" x2="480" y2="330" stroke="#5a5a5a" stroke-width="2" marker-end="url(#arrow)"/>
-  <line x1="370" y1="390" x2="230" y2="485" stroke="#4a8c6f" stroke-width="2" marker-end="url(#arrow-green)"/>
-  <line x1="590" y1="390" x2="730" y2="485" stroke="#b8952e" stroke-width="2" marker-end="url(#arrow-gold)"/>
-  <rect x="140" y="418" width="118" height="18" rx="4" fill="#f8f6f3" opacity="0.95"/>
-  <text x="199" y="432" text-anchor="middle" class="arrow-label" fill="#4a8c6f">fetch · eval · scrape</text>
-  <rect x="610" y="418" width="165" height="18" rx="4" fill="#f8f6f3" opacity="0.95"/>
-  <text x="692" y="432" text-anchor="middle" class="arrow-label" fill="#b8952e">screenshot · click · fill</text>
-  <text x="498" y="190" class="arrow-label">tool call</text>
-  <text x="498" y="340" class="arrow-label">request + params</text>
-  <rect x="720" y="540" width="210" height="82" rx="8" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
-  <text x="825" y="558" text-anchor="middle" class="legend-title">Legend</text>
-  <line x1="734" y1="574" x2="762" y2="574" stroke="#4a8c6f" stroke-width="2"/>
-  <polygon points="762,570 768,574 762,578" fill="#4a8c6f"/>
-  <text x="776" y="579" class="legend-text">Light tier (Obscura)</text>
-  <line x1="734" y1="592" x2="762" y2="592" stroke="#b8952e" stroke-width="2"/>
-  <polygon points="762,588 768,592 762,596" fill="#b8952e"/>
-  <text x="776" y="597" class="legend-text">Heavy tier (CDP)</text>
-  <line x1="734" y1="610" x2="762" y2="610" stroke="#5a5a5a" stroke-width="2"/>
-  <polygon points="762,606 768,610 762,614" fill="#5a5a5a"/>
-  <text x="776" y="615" class="legend-text">Control flow</text>
+<rect width="1080" height="720" fill="#f8f6f3"/>
+
+  <!-- Title -->
+  <text x="540" y="36" text-anchor="middle" class="title">PiArgus — Tiered Browser + Search + Docs Architecture</text>
+  <text x="540" y="54" text-anchor="middle" class="node-sub">Argus Panoptes — sees all, routes wisely, knows where to look</text>
+
+  <!-- Pi Coding Agent -->
+  <rect x="390" y="75" width="300" height="56" rx="12" fill="#a8c5e6" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
+  <text x="540" y="100" text-anchor="middle" class="node-label">Pi Coding Agent</text>
+  <text x="540" y="118" text-anchor="middle" class="node-detail">Invokes tools via Extension API</text>
+
+  <!-- PiArgus Extension -->
+  <rect x="240" y="155" width="600" height="56" rx="12" fill="#9dd4c7" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
+  <text x="540" y="180" text-anchor="middle" class="node-label">PiArgus Extension</text>
+  <text x="540" y="198" text-anchor="middle" class="node-detail">10 tools · Auto tier routing · before_agent_start hook</text>
+
+  <!-- Tier Router diamond -->
+  <polygon points="340,280 440,325 340,370 240,325" fill="#f4e4c1" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
+  <text x="340" y="322" text-anchor="middle" class="node-label">Tier</text>
+  <text x="340" y="338" text-anchor="middle" class="node-label">Router</text>
+
+  <!-- PiDocs resolver diamond -->
+  <polygon points="740,280 850,325 740,370 630,325" fill="#d4c5e6" stroke="#4a4a4a" stroke-width="2.5" filter="url(#shadow)"/>
+  <text x="740" y="318" text-anchor="middle" class="node-label">PiDocs</text>
+  <text x="740" y="336" text-anchor="middle" class="node-sub">Resolver Pipeline</text>
+
+  <!-- Tool groups labels -->
+  <text x="30" y="435" class="layer-label">Browser Tools</text>
+  <text x="30" y="455" class="node-sub">Light (Obscura)</text>
+
+  <!-- Light tier box -->
+  <rect x="80" y="400" width="195" height="105" rx="10" fill="#a8c5e6" stroke="#4a4a4a" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="177" y="418" text-anchor="middle" class="tool-label">browser_fetch</text>
+  <text x="177" y="432" text-anchor="middle" class="tool-detail">text · html · links · eval</text>
+  <text x="177" y="450" text-anchor="middle" class="tool-label">browser_navigate</text>
+  <text x="177" y="464" text-anchor="middle" class="tool-detail">title · url · metadata</text>
+  <text x="177" y="482" text-anchor="middle" class="tool-label">browser_scrape</text>
+  <text x="177" y="496" text-anchor="middle" class="tool-detail">parallel bulk fetch</text>
+
+  <!-- Heavy tier box -->
+  <text x="30" y="550" class="layer-label">Heavy tier</text>
+  <text x="30" y="567" class="node-sub">smolvm + Chromium</text>
+
+  <rect x="80" y="520" width="195" height="85" rx="10" fill="#f4e4c1" stroke="#4a4a4a" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="177" y="542" text-anchor="middle" class="tool-label">browser_screenshot</text>
+  <text x="177" y="556" text-anchor="middle" class="tool-detail">full-page PNG capture</text>
+  <text x="177" y="574" text-anchor="middle" class="tool-label">browser_action</text>
+  <text x="177" y="588" text-anchor="middle" class="tool-detail">click · fill · hover · wait_for</text>
+
+  <!-- Search tier -->
+  <rect x="340" y="400" width="210" height="90" rx="10" fill="#b5d8f0" stroke="#4a4a4a" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="445" y="420" text-anchor="middle" class="tool-label">WEB_Search</text>
+  <text x="445" y="435" text-anchor="middle" class="tool-detail">SearXNG metasearch</text>
+  <text x="445" y="454" text-anchor="middle" class="tool-label">WEB_Research</text>
+  <text x="445" y="469" text-anchor="middle" class="tool-detail">search → fetch → extract</text>
+  <text x="340" y="402" text-anchor="start" class="node-sub" fill="#5b7ba5" font-size="10">⚙ SearXNG</text>
+
+  <!-- VM status -->
+  <rect x="340" y="510" width="210" height="40" rx="8" fill="#e8e4e0" stroke="#4a4a4a" stroke-width="1" filter="url(#shadow)"/>
+  <text x="445" y="535" text-anchor="middle" class="tool-label">browser_vm_status</text>
+
+  <!-- PiDocs tier -->
+  <rect x="600" y="400" width="210" height="90" rx="10" fill="#d4c5e6" stroke="#4a4a4a" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="705" y="420" text-anchor="middle" class="tool-label">pidocs_lookup</text>
+  <text x="705" y="435" text-anchor="middle" class="tool-detail">docs URLs · description</text>
+  <text x="705" y="454" text-anchor="middle" class="tool-label">pidocs_install</text>
+  <text x="705" y="469" text-anchor="middle" class="tool-detail">install commands · platform</text>
+
+  <!-- Built-in resolvers -->
+  <rect x="600" y="510" width="210" height="105" rx="8" fill="#efe8f5" stroke="#7c5cbf" stroke-width="1.2" filter="url(#shadow)"/>
+  <text x="705" y="528" text-anchor="middle" class="node-sub" font-weight="600" fill="#7c5cbf">11 Built-in Resolvers</text>
+  <text x="705" y="545" text-anchor="middle" class="node-sub">npm · github · pip · cargo</text>
+  <text x="705" y="559" text-anchor="middle" class="node-sub">brew · docker · vscode · go</text>
+  <text x="705" y="573" text-anchor="middle" class="node-sub">aur · flatpak · snap</text>
+  <text x="705" y="592" text-anchor="middle" class="node-sub">↓ + custom · SearXNG fallback</text>
+
+  <!-- Arrows -->
+  <!-- Agent → Extension -->
+  <line x1="540" y1="131" x2="540" y2="155" stroke="#5a5a5a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Extension → Router -->
+  <line x1="420" y1="211" x2="360" y2="276" stroke="#5a5a5a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Extension → PiDocs -->
+  <line x1="660" y1="211" x2="720" y2="276" stroke="#7c5cbf" stroke-width="2" marker-end="url(#arrow-purple)"/>
+
+  <!-- Router → Light tier -->
+  <line x1="290" y1="360" x2="177" y2="400" stroke="#4a8c6f" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+  <!-- Router → Heavy tier -->
+  <line x1="310" y1="370" x2="177" y2="520" stroke="#b8952e" stroke-width="2" marker-end="url(#arrow-gold)"/>
+
+  <!-- PiDocs → Search (SearXNG fallback) -->
+  <line x1="700" y1="348" x2="520" y2="400" stroke="#5b7ba5" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#arrow-blue)"/>
+  <text x="595" y="370" text-anchor="middle" class="node-sub" fill="#5b7ba5" font-style="italic">fallback</text>
+
+  <!-- PiDocs → Resolvers -->
+  <line x1="740" y1="370" x2="705" y2="510" stroke="#7c5cbf" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+  <!-- Arrow labels -->
+  <text x="545" y="146" class="arrow-label">tool call</text>
+  <text x="355" y="255" class="arrow-label">route</text>
+  <text x="670" y="245" class="arrow-label" fill="#7c5cbf">resolve</text>
+
+  <!-- Obscura label -->
+  <text x="177" y="395" text-anchor="middle" class="node-sub" fill="#4a8c6f">LIGHT</text>
+
+  <!-- Legend -->
+  <rect x="840" y="520" width="210" height="145" rx="8" fill="#ffffff" stroke="#4a4a4a" stroke-width="1.5"/>
+  <text x="945" y="538" text-anchor="middle" class="legend-title">Legend</text>
+  <line x1="854" y1="554" x2="878" y2="554" stroke="#4a8c6f" stroke-width="2"/>
+  <polygon points="878,550 884,554 878,558" fill="#4a8c6f"/>
+  <text x="892" y="558" class="legend-text">Light tier (Obscura)</text>
+  <line x1="854" y1="572" x2="878" y2="572" stroke="#b8952e" stroke-width="2"/>
+  <polygon points="878,568 884,572 878,576" fill="#b8952e"/>
+  <text x="892" y="576" class="legend-text">Heavy tier (CDP)</text>
+  <line x1="854" y1="590" x2="878" y2="590" stroke="#5b7ba5" stroke-width="2"/>
+  <polygon points="878,586 884,590 878,594" fill="#5b7ba5"/>
+  <text x="892" y="594" class="legend-text">Search (SearXNG)</text>
+  <line x1="854" y1="608" x2="878" y2="608" stroke="#7c5cbf" stroke-width="2"/>
+  <polygon points="878,604 884,608 878,612" fill="#7c5cbf"/>
+  <text x="892" y="612" class="legend-text">Docs (PiDocs)</text>
+  <line x1="854" y1="626" x2="878" y2="626" stroke="#5a5a5a" stroke-width="2" stroke-dasharray="6 3"/>
+  <polygon points="878,622 884,626 878,630" fill="#5a5a5a"/>
+  <text x="892" y="630" class="legend-text">Fallback path</text>
+  <line x1="854" y1="644" x2="878" y2="644" stroke="#5a5a5a" stroke-width="2"/>
+  <polygon points="878,640 884,644 878,648" fill="#5a5a5a"/>
+  <text x="892" y="648" class="legend-text">Control flow</text>
+
+  <!-- before_agent_start label -->
+  <text x="540" y="220" text-anchor="middle" class="node-sub" fill="#7c5cbf" font-style="italic">⚡ before_agent_start hook (install intent detection)</text>
 </svg>

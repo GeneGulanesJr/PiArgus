@@ -114,7 +114,7 @@ export function registerWebSearch(pi: ExtensionAPI) {
       ),
     }),
 
-    async execute(_toolCallId, params, _signal) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const { url: searxngUrl, error: vmError } = await ensureSearXNG();
 
       if (vmError) {
@@ -238,7 +238,7 @@ export function registerWebResearch(pi: ExtensionAPI) {
       ),
     }),
 
-    async execute(_toolCallId, params, _signal) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const { error: vmError } = await ensureSearXNG();
 
       if (vmError) {

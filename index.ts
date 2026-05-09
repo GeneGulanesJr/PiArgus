@@ -97,7 +97,7 @@ export default async function (pi: ExtensionAPI) {
       ),
     }),
 
-    async execute(_id, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const { stdout, stderr } = await evalJs(
         params.url,
         "JSON.stringify({title: document.title, url: location.href})",
@@ -105,7 +105,7 @@ export default async function (pi: ExtensionAPI) {
       );
 
       if (stderr && !stdout) {
-        return { content: [{ type: "text", text: `Error: ${stderr}` }], isError: true };
+        return { content: [{ type: "text", text: `Error: ${stderr}` }], details: undefined, isError: true };
       }
 
       return {
@@ -150,7 +150,7 @@ export default async function (pi: ExtensionAPI) {
       selector: Type.Optional(Type.String({ description: "CSS selector to restrict output" })),
     }),
 
-    async execute(_id, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const mode = params.mode || "html";
       const opts = {
         waitUntil: params.wait_until,
@@ -165,7 +165,7 @@ export default async function (pi: ExtensionAPI) {
       else result = await fetchHtml(params.url, opts);
 
       if (result.stderr && !result.stdout) {
-        return { content: [{ type: "text", text: `Error: ${result.stderr}` }], isError: true };
+        return { content: [{ type: "text", text: `Error: ${result.stderr}` }], details: undefined, isError: true };
       }
 
       return {
@@ -209,7 +209,7 @@ export default async function (pi: ExtensionAPI) {
       height: Type.Optional(Type.Number({ description: "Viewport height in pixels. Default: 800." })),
     }),
 
-    async execute(_id, params, signal) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const outputPath = params.path || "/tmp/shot.png";
 
       const result = await smolvmScreenshot(params.url, outputPath, {
@@ -219,7 +219,7 @@ export default async function (pi: ExtensionAPI) {
       });
 
       if (result.error) {
-        return { content: [{ type: "text", text: `Screenshot failed: ${result.error}` }], isError: true };
+        return { content: [{ type: "text", text: `Screenshot failed: ${result.error}` }], details: undefined, isError: true };
       }
 
       // Read the screenshot file and return as base64 image
@@ -231,12 +231,9 @@ export default async function (pi: ExtensionAPI) {
           content: [
             {
               type: "image",
-              source: {
-                type: "base64",
-                mediaType: "image/png",
-                data: base64,
-              },
-            },
+              data: base64,
+              mimeType: "image/png",
+            } as const,
             {
               type: "text",
               text: `Screenshot saved to ${outputPath} (${(imageBuffer.length / 1024).toFixed(1)} KB)`,
@@ -301,7 +298,7 @@ export default async function (pi: ExtensionAPI) {
       stealth: Type.Optional(Type.Boolean({ description: "Enable anti-detection. Default: false." })),
     }),
 
-    async execute(_id, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const tier = classifyTier("browser_action", params);
 
       // ── Light tier (Obscura) ──────────────────────────────────────────
@@ -309,11 +306,11 @@ export default async function (pi: ExtensionAPI) {
         switch (params.action) {
           case "js": {
             if (!params.expression) {
-              return { content: [{ type: "text", text: "expression required for js action" }], isError: true };
+              return { content: [{ type: "text", text: "expression required for js action" }], details: undefined, isError: true };
             }
             const { stdout, stderr } = await evalJs(params.url, params.expression, { stealth: params.stealth });
             if (stderr && !stdout) {
-              return { content: [{ type: "text", text: `Error: ${stderr}` }], isError: true };
+              return { content: [{ type: "text", text: `Error: ${stderr}` }], details: undefined, isError: true };
             }
             return {
               content: [{ type: "text", text: stdout || "JS executed (no output)." }],
@@ -328,7 +325,7 @@ export default async function (pi: ExtensionAPI) {
               { stealth: params.stealth }
             );
             if (stderr && !stdout) {
-              return { content: [{ type: "text", text: `Error: ${stderr}` }], isError: true };
+              return { content: [{ type: "text", text: `Error: ${stderr}` }], details: undefined, isError: true };
             }
             return { content: [{ type: "text", text: stdout }], details: { tier, action: params.action } };
           }
@@ -345,7 +342,7 @@ export default async function (pi: ExtensionAPI) {
               { stealth: params.stealth }
             );
             if (stderr && !stdout) {
-              return { content: [{ type: "text", text: `Error: ${stderr}` }], isError: true };
+              return { content: [{ type: "text", text: `Error: ${stderr}` }], details: undefined, isError: true };
             }
             return { content: [{ type: "text", text: stdout }], details: { tier, action: params.action } };
           }
@@ -353,6 +350,7 @@ export default async function (pi: ExtensionAPI) {
           default: {
             return {
               content: [{ type: "text", text: `Unknown light action: ${params.action}` }],
+              details: undefined,
               isError: true,
             };
           }
@@ -366,6 +364,7 @@ export default async function (pi: ExtensionAPI) {
             type: "text",
             text: `Heavy-tier action '${params.action}' requires smolvm. Install: curl -sSL https://smolmachines.com/install.sh | bash`,
           }],
+          details: undefined,
           isError: true,
         };
       }
@@ -375,7 +374,7 @@ export default async function (pi: ExtensionAPI) {
       switch (params.action) {
         case "click":
           if (!params.selector && (params.x === undefined || params.y === undefined)) {
-            return { content: [{ type: "text", text: "click requires selector or x/y coordinates" }], isError: true };
+            return { content: [{ type: "text", text: "click requires selector or x/y coordinates" }], details: undefined, isError: true };
           }
           interactionAction = params.selector
             ? { type: "click", selector: params.selector }
@@ -383,25 +382,26 @@ export default async function (pi: ExtensionAPI) {
           break;
         case "fill":
           if (!params.selector || !params.value) {
-            return { content: [{ type: "text", text: "fill requires selector and value" }], isError: true };
+            return { content: [{ type: "text", text: "fill requires selector and value" }], details: undefined, isError: true };
           }
           interactionAction = { type: "fill", selector: params.selector, value: params.value };
           break;
         case "hover":
           if (!params.selector) {
-            return { content: [{ type: "text", text: "hover requires selector" }], isError: true };
+            return { content: [{ type: "text", text: "hover requires selector" }], details: undefined, isError: true };
           }
           interactionAction = { type: "hover", selector: params.selector };
           break;
         case "wait_for":
           if (!params.selector) {
-            return { content: [{ type: "text", text: "wait_for requires selector" }], isError: true };
+            return { content: [{ type: "text", text: "wait_for requires selector" }], details: undefined, isError: true };
           }
           interactionAction = { type: "wait_for", selector: params.selector };
           break;
         default:
           return {
             content: [{ type: "text", text: `Unknown heavy action: ${params.action}` }],
+            details: undefined,
             isError: true,
           };
       }
@@ -409,7 +409,7 @@ export default async function (pi: ExtensionAPI) {
       const interactResult = await interact(params.url, [interactionAction], { stealth: params.stealth });
 
       if (!interactResult.success) {
-        return { content: [{ type: "text", text: `Action failed: ${interactResult.error}` }], isError: true };
+        return { content: [{ type: "text", text: `Action failed: ${interactResult.error}` }], details: undefined, isError: true };
       }
 
       return {
@@ -442,7 +442,7 @@ export default async function (pi: ExtensionAPI) {
       ),
     }),
 
-    async execute(_id, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const concurrency = params.concurrency || 10;
       const results: Array<{ url: string; content: string; error?: string }> = [];
 
@@ -493,7 +493,7 @@ export default async function (pi: ExtensionAPI) {
       action: Type.Optional(Type.String({ description: "Action: 'status' | 'start'. Default: 'status'." })),
     }),
 
-    async execute(_id, params) {
+    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const obscuraOk = isObscuraInstalled();
       const smolvmOk = isSmolvmInstalled();
 
@@ -504,6 +504,7 @@ export default async function (pi: ExtensionAPI) {
               type: "text",
               text: "smolvm not installed. Install: curl -sSL https://smolmachines.com/install.sh | bash",
             }],
+            details: undefined,
             isError: true,
           };
         }

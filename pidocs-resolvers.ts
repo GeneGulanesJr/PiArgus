@@ -229,6 +229,14 @@ export function detectType(name: string): string | null {
   return null;
 }
 
+// ─── Resolver config helper ────────────────────────────────────────────────
+
+/** Check if a resolver config entry is disabled. Handles both ResolverConfig and CustomResolverConfig[]. */
+function isResolverDisabled(config: ResolverConfig | CustomResolverConfig[]): boolean {
+  if (Array.isArray(config)) return false; // custom array is never "disabled"
+  return config.enabled === false;
+}
+
 // ─── Resolver runner ─────────────────────────────────────────────────────────
 
 type ResolverFn = (name: string) => ResolverResult | null;
@@ -261,9 +269,12 @@ export function runResolvers(
   // If type hint provided, try that resolver first
   if (options?.typeHint) {
     const entry = RESOLVERS.find((r) => r.key === options.typeHint);
-    if (entry && config.resolvers[entry.key as keyof typeof config.resolvers]?.enabled !== false) {
-      const result = entry.fn(name);
-      if (result) return result;
+    if (entry) {
+      const resolverConfig = config.resolvers[entry.key as keyof typeof config.resolvers];
+      if (!isResolverDisabled(resolverConfig)) {
+        const result = entry.fn(name);
+        if (result) return result;
+      }
     }
   }
 
@@ -271,15 +282,19 @@ export function runResolvers(
   const detectedType = detectType(name);
   if (detectedType) {
     const entry = RESOLVERS.find((r) => r.key === detectedType);
-    if (entry && config.resolvers[entry.key as keyof typeof config.resolvers]?.enabled !== false) {
-      const result = entry.fn(name);
-      if (result) return result;
+    if (entry) {
+      const resolverConfig = config.resolvers[entry.key as keyof typeof config.resolvers];
+      if (!isResolverDisabled(resolverConfig)) {
+        const result = entry.fn(name);
+        if (result) return result;
+      }
     }
   }
 
   // Try all resolvers in priority order
   for (const entry of RESOLVERS) {
-    if (config.resolvers[entry.key as keyof typeof config.resolvers]?.enabled === false) continue;
+    const resolverConfig = config.resolvers[entry.key as keyof typeof config.resolvers];
+    if (isResolverDisabled(resolverConfig)) continue;
     const result = entry.fn(name);
     if (result) return result;
   }

@@ -45,7 +45,8 @@ Each resolver takes a name string and optional type hint, returns `null` (no mat
 interface ResolverResult {
   urls: string[];           // Documentation/homepage URLs
   installUrl?: string;      // URL specifically for install docs
-  description?: string;     // Short description if inferrable
+  // Note: description is NOT set by built-in resolvers (they only construct URLs).
+  // It is populated later from SearXNG snippets or page extraction.
   resolver: string;         // Which resolver matched (e.g., "npm", "github")
 }
 ```
@@ -55,10 +56,9 @@ interface ResolverResult {
 | npm (unscoped) | `lodash`, `react` | `https://www.npmjs.com/package/{name}` |
 | npm (scoped) | `@scope/name` | `https://www.npmjs.com/package/{name}` |
 | GitHub | `owner/repo` | `https://github.com/{owner}/{repo}` |
-| PyPI | `flask`, `requests` | `https://pypi.org/project/{name}` |
+| PyPI (key: `pip`) | `flask`, `requests` | `https://pypi.org/project/{name}` |
 | Cargo | `tokio`, `serde` | `https://crates.io/crates/{name}` |
-| Homebrew (formula) | `ffmpeg`, `node` | `https://formulae.brew.sh/formula/{name}` |
-| Homebrew (cask) | `firefox`, `vlc` | `https://formulae.brew.sh/cask/{name}` |
+| Homebrew | `ffmpeg`, `node`, `vlc` | Tries formula first (`https://formulae.brew.sh/formula/{name}`), then cask (`https://formulae.brew.sh/cask/{name}`). Returns both URLs if ambiguous. |
 | Docker Hub | `nginx`, `postgres` | `https://hub.docker.com/_/{name}` |
 | VS Code ext | `ms-python.python` | `https://marketplace.visualstudio.com/items?itemName={name}` |
 | Go module | `github.com/gin-gonic/gin` | `https://pkg.go.dev/{name}` |
@@ -126,7 +126,7 @@ Extraction also captures prerequisites (e.g., "requires Node.js 18+") and notes.
     resolver: string,        // "npm" | "github" | "pip" | ... | "searxng"
     name: string,
     type: string,
-    searchResults?: []       // If SearXNG was used
+    searchResults?: SearchResult[]  // If SearXNG was used (type from web-search-core.ts)
   }
 }
 ```
@@ -141,6 +141,7 @@ Extraction also captures prerequisites (e.g., "requires Node.js 18+") and notes.
   name: string,           // Package/app name
   type?: string,          // Optional registry hint (same values as pidocs_lookup)
   platform?: string       // Optional platform filter: "linux" | "mac" | "windows" | "all"
+                          // "all" returns commands for all platforms; individual commands are still tagged by platform
 }
 ```
 
@@ -182,16 +183,23 @@ pi.on("before_agent_start", async (event) => {
   ];
   
   const packagePatterns = [
-    /@[\w-]+\/[\w.-]+/,              // @scope/package (npm scoped)
-    /[\w-]+\/[\w.-]+/,               // owner/repo (GitHub)
-    /ms-[\w.]+\.[\w.]+/,             // VS Code extensions
-    /github\.com\/[\w-]+\/[\w.-]+/,  // GitHub URLs
+    /@[\w-]+\/[\w.-]+/,                       // @scope/package (npm scoped)
+    /[a-zA-Z][\w-]*\/[a-zA-Z][\w.-]+/,        // owner/repo (both parts start with letter)
+    /ms-[\w.]+\.[\w.]+/,                      // VS Code extensions
+    /github\.com\/[\w-]+\/[\w.-]+/,           // GitHub URLs
   ];
   
   const hasInstallIntent = installPatterns.some(p => p.test(prompt));
   const hasPackageRef = packagePatterns.some(p => p.test(prompt));
   
-  if (hasInstallIntent || hasPackageRef) {
+  // Package ref alone is NOT enough — must also have install intent to avoid
+  // false-triggering on paths, dates (05/09), or random slash-separated text.
+  // Exception: explicit package managers (npm install, pip install, etc.)
+  // are already caught by installPatterns.
+  const shouldInject = hasInstallIntent || 
+    (hasPackageRef && /\b(install|setup|use|run|add|get)\b/.test(prompt));
+  
+  if (shouldInject) {
     return {
       systemPrompt: event.systemPrompt + 
         "\n\nBefore installing packages or apps, call pidocs_install to get the correct " +
@@ -248,6 +256,22 @@ When `type` is not specified, resolvers try to infer the type from the name patt
 
 If no pattern matches, try all resolvers in order, then fall back to SearXNG.
 
+**Type key to registry mapping:** The `type` parameter uses user-friendly keys that map to registries:
+
+| Type key | Registry | URL domain |
+|----------|----------|------------|
+| `npm` | npm registry | npmjs.com |
+| `github` | GitHub | github.com |
+| `pip` | PyPI | pypi.org |
+| `cargo` | crates.io | crates.io |
+| `brew` | Homebrew | formulae.brew.sh |
+| `docker` | Docker Hub | hub.docker.com |
+| `vscode` | VS Code Marketplace | marketplace.visualstudio.com |
+| `go` | Go packages | pkg.go.dev |
+| `aur` | Arch AUR | aur.archlinux.org |
+| `flatpak` | Flathub | flathub.org |
+| `snap` | Snapcraft | snapcraft.io |
+
 ## Error Handling
 
 - **No SearXNG available:** `pidocs_lookup` returns resolver URLs only (no SearXNG results). `pidocs_install` returns built-in URL + best-effort install commands from known patterns.
@@ -261,3 +285,9 @@ If no pattern matches, try all resolvers in order, then fall back to SearXNG.
 - ✅ Internally consistent — `pidocs-core.ts` orchestrates the pipeline defined in `pidocs-resolvers.ts` and `pidocs-install-extract.ts`, types match across files
 - ✅ All requirement areas covered — built-in resolvers, config extensibility, SearXNG fallback, Obscura extraction, before_agent_start hook
 - ✅ Scope is right — single focused feature in PiArgus, no unrelated refactoring
+- ✅ Type naming: parameter key `pip` → PyPI (`pypi.org`) mapping documented explicitly
+- ✅ Homebrew ambiguity: merged formula/cask into single resolver that tries both
+- ✅ Package pattern regex: tightened to `[a-zA-Z][\w-]*/[a-zA-Z][\w.-]+` and requires install intent context
+- ✅ `description` field: removed from ResolverResult (only available after SearXNG/fetch), populated in final tool result
+- ✅ `platform "all"`: documented as returning all platforms with individual commands still tagged
+- ✅ `searchResults` type: uses `SearchResult[]` from `web-search-core.ts`

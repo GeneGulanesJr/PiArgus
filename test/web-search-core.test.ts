@@ -1,6 +1,6 @@
 // test/web-search-core.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { searchSearXNG, formatResults, DEFAULT_MAX_RESULTS } from "../web-search-core";
+import { searchSearXNG, formatResults, formatResultsCompact, extractDomain, researchQuery, DEFAULT_MAX_RESULTS } from "../web-search-core";
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -232,5 +232,191 @@ describe("formatResults", () => {
 
     expect(text).not.toContain("**Snippet:**");
     expect(text).not.toContain("**Source:**");
+  });
+});
+
+describe("extractDomain", () => {
+  it("extracts domain with path segments", () => {
+    expect(extractDomain("https://docs.python.org/3/library/asyncio.html")).toBe("docs.python.org/3/library");
+  });
+
+  it("returns just hostname for root URL", () => {
+    expect(extractDomain("https://example.com/")).toBe("example.com");
+  });
+
+  it("returns just hostname for bare domain", () => {
+    expect(extractDomain("https://example.com")).toBe("example.com");
+  });
+
+  it("handles malformed URLs gracefully", () => {
+    expect(extractDomain("not-a-url")).toBe("not-a-url");
+  });
+});
+
+describe("formatResultsCompact", () => {
+  it("formats results as compact one-line entries", () => {
+    const response = {
+      results: [
+        {
+          title: "FastAPI Tutorial",
+          url: "https://fastapi.tiangolo.com/tutorial/dependencies/",
+          snippet: "FastAPI has a powerful but intuitive Dependency Injection system that handles...",
+          engines: ["google", "brave"],
+          publishedDate: "2025-03-15",
+        },
+      ],
+      totalResults: 142,
+      query: "fastapi dependency injection",
+    };
+
+    const text = formatResultsCompact(response);
+
+    // Should be one line per result (plus header line)
+    expect(text).toContain('Results for "fastapi dependency injection"');
+    expect(text).toContain("1. FastAPI Tutorial 2025-03-15");
+    expect(text).toContain("fastapi.tiangolo.com/tutorial/dependencies");
+    expect(text).toContain("[google,brave]");
+  });
+
+  it("truncates long snippets", () => {
+    const longSnippet = "A very long snippet that goes on and on and on and should be truncated because it is way more than 80 characters in length";
+    const text = formatResultsCompact({
+      results: [
+        { title: "Test", url: "https://example.com", snippet: longSnippet, engines: [] },
+      ],
+      totalResults: 1,
+      query: "test",
+    });
+
+    // Snippet should be truncated with ellipsis
+    expect(text).toContain("...");
+    // Should not contain the full long snippet
+    expect(text).not.toContain(longSnippet);
+  });
+
+  it("shows 'No results found' for empty results", () => {
+    const text = formatResultsCompact({
+      results: [],
+      totalResults: 0,
+      query: "nothing",
+    });
+
+    expect(text).toContain("No results found");
+  });
+
+  it("omits empty snippet and engines", () => {
+    const text = formatResultsCompact({
+      results: [
+        { title: "Bare", url: "https://example.com", snippet: "", engines: [] },
+      ],
+      totalResults: 1,
+      query: "bare",
+    });
+
+    expect(text).not.toContain('""');  // no empty quoted snippet
+    expect(text).not.toContain("[]");   // no empty engines
+  });
+
+  it("compact format is significantly shorter than full format", () => {
+    const response = {
+      results: Array.from({ length: 10 }, (_, i) => ({
+        title: `Result Title Number ${i + 1}`,
+        url: `https://example.com/page/${i}`,
+        snippet: `This is a snippet for result ${i + 1} that contains enough text to demonstrate the difference between compact and full format output.`,
+        engines: ["google", "brave", "duckduckgo"],
+        publishedDate: "2025-01-01",
+      })),
+      totalResults: 100,
+      query: "test query",
+    };
+
+    const compact = formatResultsCompact(response);
+    const full = formatResults(response);
+
+    // Compact format should be noticeably shorter than full format
+    expect(compact.length).toBeLessThan(full.length * 0.75);
+  });
+});
+
+describe("researchQuery", () => {
+  it("searches and fetches pages, extracting relevant content", async () => {
+    // Mock searchSearXNG is already mocked via global fetch
+    // Mock fetchPageText callback
+    const mockFetchPageText = vi.fn()
+      .mockResolvedValueOnce({
+        text: "\n\nFastAPI has a powerful dependency injection system. Dependencies are declared as function parameters. The framework handles injection automatically.\n\nSome unrelated content about weather.",
+        error: undefined,
+      })
+      .mockResolvedValueOnce({
+        text: "\n\nDependency injection in FastAPI works through the Depends keyword. You can declare dependencies at the path operation level.",
+        error: undefined,
+      });
+
+    const result = await researchQuery(
+      "fastapi dependency injection",
+      {},
+      { depth: 2, maxContentChars: 2000 },
+      mockFetchPageText,
+    );
+
+    // Should have called fetchPageText for the top 2 results
+    expect(mockFetchPageText).toHaveBeenCalledTimes(2);
+    expect(result.query).toBe("fastapi dependency injection");
+    expect(result.searchResults).toBe(2); // depth=2 limits search results
+    expect(result.fetchedPages).toBe(2);
+    expect(result.summary).toContain("fastapi dependency injection");
+  });
+
+  it("returns fallback message when no relevant content is found", async () => {
+    // fetchPageText returns content with no keyword overlap
+    const mockFetchPageText = vi.fn()
+      .mockResolvedValue({
+        text: "Completely unrelated content about cooking and recipes.",
+        error: undefined,
+      });
+
+    const result = await researchQuery(
+      "quantum computing algorithms",
+      {},
+      { depth: 2, maxContentChars: 4000 },
+      mockFetchPageText,
+    );
+
+    expect(result.summary).toContain("no highly relevant content was extractable");
+  });
+
+  it("handles fetch errors gracefully", async () => {
+    const mockFetchPageText = vi.fn()
+      .mockResolvedValueOnce({
+        text: "",
+        error: "Connection timeout",
+      });
+
+    const result = await researchQuery(
+      "test query",
+      {},
+      { depth: 1, maxContentChars: 4000 },
+      mockFetchPageText,
+    );
+
+    expect(result.fetchedPages).toBe(0);
+    expect(result.summary).toContain("no highly relevant content");
+  });
+
+  it("respects maxContentChars budget", async () => {
+    const mockFetchPageText = vi.fn()
+      .mockResolvedValue({
+        text: "FastAPI dependency injection. " + "Keyword match content. ".repeat(100),
+        error: undefined,
+      });
+
+    const result = await researchQuery(
+      "fastapi dependency injection",
+      {},
+      { depth: 1, maxContentChars: 500 }, // Small budget
+      mockFetchPageText,
+    );
+
+    expect(result.totalContentChars).toBeLessThanOrEqual(600); // Some margin for paragraphs
   });
 });

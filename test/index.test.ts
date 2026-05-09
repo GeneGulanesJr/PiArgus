@@ -27,8 +27,10 @@ vi.mock("../tier-router", () => ({
 }));
 
 const mockRegisterWebSearch = vi.fn();
+const mockRegisterWebResearch = vi.fn();
 vi.mock("../web-search", () => ({
   registerWebSearch: (...args: any[]) => mockRegisterWebSearch(...args),
+  registerWebResearch: (...args: any[]) => mockRegisterWebResearch(...args),
 }));
 
 // Mock node:fs/promises for readFile (screenshot)
@@ -57,12 +59,20 @@ describe("PiArgus extension registration", () => {
     expect(mockPi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
   });
 
-  it("registers 6 tools", () => {
+  it("registers 6 browser tools plus delegates WEB_Search and WEB_Research", () => {
+    // 6 tools registered directly in index.ts
     expect(mockPi.registerTool).toHaveBeenCalledTimes(6);
+    // WEB_Search and WEB_Research are registered via registerWebSearch/registerWebResearch
+    expect(mockRegisterWebSearch).toHaveBeenCalledWith(mockPi);
+    expect(mockRegisterWebResearch).toHaveBeenCalledWith(mockPi);
   });
 
   it("calls registerWebSearch with pi", () => {
     expect(mockRegisterWebSearch).toHaveBeenCalledWith(mockPi);
+  });
+
+  it("calls registerWebResearch with pi", () => {
+    expect(mockRegisterWebResearch).toHaveBeenCalledWith(mockPi);
   });
 
   it("registers browser_navigate tool", () => {
@@ -94,6 +104,12 @@ describe("PiArgus extension registration", () => {
     const names = registeredTools.map((t) => t.name);
     expect(names).toContain("browser_vm_status");
     expect(names).not.toContain("browser_obscura_serve");
+  });
+
+  it("does not register WEB_Search or WEB_Research tools directly (registered via registerWebSearch/registerWebResearch)", () => {
+    const names = registeredTools.map((t) => t.name);
+    expect(names).not.toContain("WEB_Search");
+    expect(names).not.toContain("WEB_Research");
   });
 
   it("browser_fetch has a mode parameter with union type", () => {

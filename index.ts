@@ -34,7 +34,7 @@ import {
 import { classifyTier } from "./tier-router";
 
 // Web search
-import { registerWebSearch } from "./web-search";
+import { registerWebSearch, registerWebResearch } from "./web-search";
 
 // Types
 import type { BrowserTier } from "./types";
@@ -64,6 +64,7 @@ export default async function (pi: ExtensionAPI) {
   // ═══════════════════════════════════════════════════════════════════════════
 
   registerWebSearch(pi);
+  registerWebResearch(pi);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TOOL: browser_navigate (LIGHT — Obscura)

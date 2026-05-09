@@ -1,16 +1,49 @@
-// web-search.ts — SearXNG search tool registration for PiArgus
+// web-search.ts — SearXNG search + research tool registration for PiArgus
 //
-// This thin wrapper imports the pure logic from web-search-core.ts and binds it
-// to Pi's ExtensionAPI / TypeBox schema layer. It also auto-ensures the SearXNG
-// search VM is running before each search (lazy-loaded smolvm).
+// Two tools:
+//   WEB_Search  — compact discovery: titles, domains, ~80 char snippets
+//   WEB_Research — deep dive: search → fetch top N → keyword-extract relevant content
+//
+// Thin wrapper imports pure logic from web-search-core.ts and binds it
+// to Pi's ExtensionAPI / TypeBox schema layer.
 
 import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { searchSearXNG, formatResults, DEFAULT_MAX_RESULTS, type SearchResponse } from "./web-search-core";
+import {
+  searchSearXNG,
+  formatResultsCompact,
+  researchQuery,
+  DEFAULT_MAX_RESULTS,
+  type SearchResponse,
+} from "./web-search-core";
 import { ensureSearchVm, SEARXNG_LOCAL_URL, isSmolvmInstalled } from "./smolvm";
+import { fetchText } from "./obscura";
 
-export { searchSearXNG, formatResults, DEFAULT_MAX_RESULTS } from "./web-search-core";
+export { searchSearXNG, formatResultsCompact, DEFAULT_MAX_RESULTS } from "./web-search-core";
 export type { SearchResult, SearchResponse } from "./web-search-core";
+
+// ─── Shared: auto-ensure SearXNG VM ──────────────────────────────────────────
+
+async function ensureSearXNG(): Promise<{ url: string | null; error?: string }> {
+  const configuredUrl = process.env.SEARXNG_URL;
+  const useLocalSmolvm = !configuredUrl || configuredUrl === SEARXNG_LOCAL_URL;
+
+  if (useLocalSmolvm && isSmolvmInstalled()) {
+    const ensure = await ensureSearchVm();
+    if (!ensure.running) {
+      return {
+        url: null,
+        error: `Failed to start SearXNG search VM: ${ensure.error}\n` +
+          `Set SEARXNG_URL to point to an external SearXNG instance, or install smolvm.`,
+      };
+    }
+    return { url: ensure.url || SEARXNG_LOCAL_URL };
+  }
+
+  return { url: configuredUrl || SEARXNG_LOCAL_URL };
+}
+
+// ─── TOOL: WEB_Search (compact discovery) ────────────────────────────────────
 
 export function registerWebSearch(pi: ExtensionAPI) {
   pi.registerTool({
@@ -82,25 +115,14 @@ export function registerWebSearch(pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal) {
-      const configuredUrl = process.env.SEARXNG_URL;
-      const useLocalSmolvm = !configuredUrl || configuredUrl === SEARXNG_LOCAL_URL;
-      let searxngUrl = configuredUrl || SEARXNG_LOCAL_URL;
+      const { url: searxngUrl, error: vmError } = await ensureSearXNG();
 
-      // Auto-ensure the SearXNG search VM if using the local smolvm instance
-      if (useLocalSmolvm && isSmolvmInstalled()) {
-        const ensure = await ensureSearchVm();
-        if (!ensure.running) {
-          return {
-            content: [{
-              type: "text" as const,
-              text: `Failed to start SearXNG search VM: ${ensure.error}\n` +
-                `Set SEARXNG_URL to point to an external SearXNG instance, or install smolvm.`,
-            }],
-            details: { query: params.query, error: ensure.error },
-            isError: true,
-          };
-        }
-        searxngUrl = ensure.url || SEARXNG_LOCAL_URL;
+      if (vmError) {
+        return {
+          content: [{ type: "text" as const, text: vmError }],
+          details: { query: params.query, error: vmError },
+          isError: true,
+        };
       }
 
       try {
@@ -111,7 +133,8 @@ export function registerWebSearch(pi: ExtensionAPI) {
           maxResults: params.max_results,
         });
 
-        const formatted = formatResults(searchResult);
+        // Use compact one-line-per-result format to minimize context burn
+        const formatted = formatResultsCompact(searchResult);
 
         return {
           content: [{ type: "text" as const, text: formatted }],
@@ -134,6 +157,140 @@ export function registerWebSearch(pi: ExtensionAPI) {
             text: isTimeout
               ? `Web search timed out for "${params.query}". The SearXNG instance at ${searxngUrl} may be slow or unreachable. Try a simpler query or check the server.`
               : `Web search failed for "${params.query}": ${message}`,
+          }],
+          details: { query: params.query, error: message },
+          isError: true,
+        };
+      }
+    },
+  });
+}
+
+// ─── TOOL: WEB_Research (deep search with extraction) ────────────────────────
+
+export function registerWebResearch(pi: ExtensionAPI) {
+  pi.registerTool({
+    name: "WEB_Research",
+    label: "Web Research",
+    description:
+      "Deep web research: searches the web, fetches the most relevant pages, " +
+      "and returns only the content that matches your query. Uses keyword-scoring " +
+      "to extract relevant paragraphs, keeping context usage minimal. " +
+      "Use this when you need detailed answers, not just search results.",
+    promptSnippet: "Research a topic in depth with source extraction",
+    promptGuidelines: [
+      "Use WEB_Research when you need detailed information, not just search result titles.",
+      "Good for answering specific questions where you need to read and synthesize web content.",
+      "Works best with specific queries — 'Python asyncio subprocess timeout handling' over 'asyncio subprocess'.",
+      "Returns only relevant paragraphs scored against your query, minimizing context pollution.",
+      "For quick discovery, use WEB_Search instead. For depth, use WEB_Research.",
+    ],
+    parameters: Type.Object({
+      query: Type.String({
+        description:
+          "The research query. Be specific for best extraction. Examples: " +
+          "'How does Rust's borrow checker work', 'FastAPI dependency injection best practices'.",
+      }),
+      categories: Type.Optional(
+        Type.Union(
+          [
+            Type.Literal("general"),
+            Type.Literal("it"),
+            Type.Literal("science"),
+            Type.Literal("news"),
+          ],
+          {
+            description: "Search category. 'it' for tech, 'science' for academic, 'general' for everything.",
+          }
+        )
+      ),
+      language: Type.Optional(
+        Type.String({
+          description: "Search language code. Default: 'auto'.",
+        })
+      ),
+      time_range: Type.Optional(
+        Type.Union(
+          [Type.Literal("day"), Type.Literal("week"), Type.Literal("month"), Type.Literal("year")],
+          {
+            description: "Restrict results to a time range.",
+          }
+        )
+      ),
+      depth: Type.Optional(
+        Type.Number({
+          description: "Number of search results to fetch pages from (1-5). Default: 3. More = deeper but slower.",
+          minimum: 1,
+          maximum: 5,
+        })
+      ),
+      max_content_chars: Type.Optional(
+        Type.Number({
+          description: "Max total characters of extracted content to return. Default: 4000. Controls context usage.",
+          minimum: 1000,
+          maximum: 8000,
+        })
+      ),
+      stealth: Type.Optional(
+        Type.Boolean({
+          description: "Enable anti-detection when fetching pages. Default: false.",
+        })
+      ),
+    }),
+
+    async execute(_toolCallId, params, _signal) {
+      const { error: vmError } = await ensureSearXNG();
+
+      if (vmError) {
+        return {
+          content: [{ type: "text" as const, text: vmError }],
+          details: { query: params.query, error: vmError },
+          isError: true,
+        };
+      }
+
+      try {
+        const result = await researchQuery(
+          params.query,
+          {
+            categories: params.categories,
+            language: params.language,
+            timeRange: params.time_range,
+          },
+          {
+            depth: params.depth,
+            maxContentChars: params.max_content_chars,
+            stealth: params.stealth,
+          },
+          // Fetch page text using Obscura
+          async (url, opts) => {
+            const { stdout, stderr } = await fetchText(url, {
+              stealth: opts?.stealth,
+              timeout: 15_000,
+            });
+            if (stderr && !stdout) {
+              return { text: "", error: stderr };
+            }
+            return { text: stdout, error: undefined };
+          },
+        );
+
+        return {
+          content: [{ type: "text" as const, text: result.summary }],
+          details: {
+            query: result.query,
+            totalContentChars: result.totalContentChars,
+            searchResults: result.searchResults,
+            fetchedPages: result.fetchedPages,
+            sources: result.sources,
+          },
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Web research failed for "${params.query}": ${message}`,
           }],
           details: { query: params.query, error: message },
           isError: true,

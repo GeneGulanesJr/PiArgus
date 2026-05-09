@@ -85,7 +85,15 @@ export function loadPidocsConfig(configPath?: string): PidocsConfig {
 
 export function resolveNpm(name: string): ResolverResult | null {
   if (!name || name.startsWith("http")) return null;
-  // npm accepts scoped (@scope/name) and unscoped packages
+  // Must be scoped (@scope/name) or a plausible package name:
+  // starts with letter, contains only letters, digits, hyphens, underscores, dots
+  if (/^@[\w-]+\/[\w.-]+$/.test(name)) {
+    // Scoped package — always valid
+  } else if (/^[a-zA-Z][\w.-]*$/.test(name)) {
+    // Unscoped — must look like a real package name (starts with letter)
+  } else {
+    return null;
+  }
   return {
     urls: [`https://www.npmjs.com/package/${name}`],
     installUrl: `https://www.npmjs.com/package/${name}`,
@@ -106,6 +114,8 @@ export function resolveGithub(name: string): ResolverResult | null {
 
 export function resolvePip(name: string): ResolverResult | null {
   if (!name || name.startsWith("@") || name.includes("/")) return null;
+  // Must look like a Python package name: starts with letter, alphanumeric/hyphens/dots
+  if (!/^[a-zA-Z][\w.-]*$/.test(name)) return null;
   return {
     urls: [`https://pypi.org/project/${name}`],
     installUrl: `https://pypi.org/project/${name}`,
@@ -115,6 +125,8 @@ export function resolvePip(name: string): ResolverResult | null {
 
 export function resolveCargo(name: string): ResolverResult | null {
   if (!name || name.startsWith("@") || name.includes("/")) return null;
+  // Must look like a Rust crate name: starts with letter, alphanumeric + hyphens/underscores
+  if (!/^[a-zA-Z][\w-]*$/.test(name)) return null;
   return {
     urls: [`https://crates.io/crates/${name}`],
     installUrl: `https://crates.io/crates/${name}`,
@@ -124,6 +136,8 @@ export function resolveCargo(name: string): ResolverResult | null {
 
 export function resolveBrew(name: string): ResolverResult | null {
   if (!name || name.startsWith("@") || name.includes("/")) return null;
+  // Must look like a Homebrew formula/cask name: starts with letter, alphanumeric + hyphens
+  if (!/^[a-zA-Z][\w-]*$/.test(name)) return null;
   // Try both formula and cask since we can't know which without fetching
   return {
     urls: [
@@ -137,7 +151,8 @@ export function resolveBrew(name: string): ResolverResult | null {
 
 export function resolveDocker(name: string): ResolverResult | null {
   if (!name || name.startsWith("@") || name.includes("/")) return null;
-  // Official images use _/name; user images use username/name (handled by github resolver)
+  // Must look like a Docker official image name: starts with letter, alphanumeric + hyphens
+  if (!/^[a-zA-Z][\w-]*$/.test(name)) return null;
   return {
     urls: [`https://hub.docker.com/_/${name}`],
     installUrl: `https://hub.docker.com/_/${name}`,
@@ -169,6 +184,8 @@ export function resolveGo(name: string): ResolverResult | null {
 
 export function resolveAur(name: string): ResolverResult | null {
   if (!name || name.startsWith("@") || name.includes("/")) return null;
+  // AUR names: starts with letter, alphanumeric + hyphens, commonly ending in -git/-bin
+  if (!/^[a-zA-Z][\w-]*$/.test(name)) return null;
   return {
     urls: [`https://aur.archlinux.org/packages/${name}`],
     installUrl: `https://aur.archlinux.org/packages/${name}`,
@@ -193,6 +210,8 @@ export function resolveFlatpak(name: string): ResolverResult | null {
 
 export function resolveSnap(name: string): ResolverResult | null {
   if (!name || name.startsWith("@") || name.includes("/") || name.includes(".")) return null;
+  // Snap names: starts with letter, alphanumeric + hyphens
+  if (!/^[a-zA-Z][\w-]*$/.test(name)) return null;
   return {
     urls: [`https://snapcraft.io/${name}`],
     installUrl: `https://snapcraft.io/${name}`,

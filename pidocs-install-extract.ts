@@ -69,7 +69,7 @@ const INSTALL_COMMAND_PATTERNS: RegExp[] = [
   /dnf\s+install\s+[\w.-]+/g,
   /choco\s+install\s+[\w.-]+/g,
   // Generic shell commands
-  /curl\s+[\S]+\s*\|\s*(?:sudo\s+)?sh/g,
+  /curl\s+\S+.*\|\s*(?:sudo\s+)?sh/g,
   /make\s+install/g,
 ];
 

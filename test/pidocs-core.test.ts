@@ -52,13 +52,19 @@ describe("pidocs-core", () => {
       expect(result.urls).toContain("https://github.com/octocat/Hello-World");
     });
 
+    it("auto-detects scoped npm package type", async () => {
+      const result = await resolveLookup("@types/node");
+      expect(result.resolver).toBe("npm");
+      expect(result.type).toBe("npm");
+    });
+
     it("falls back to SearXNG when no built-in resolver matches", async () => {
       mockSearchSearXNG.mockResolvedValue({
         results: [
           {
             title: "VLC: Official download",
             url: "https://www.videolan.org/vlc/",
-            snippet: "Download VLC media player",
+            snippet: "Download VLC media player for Windows, Mac, Linux",
             engines: ["google"],
           },
         ],
@@ -90,16 +96,13 @@ describe("pidocs-core", () => {
       expect(mockSearchSearXNG).toHaveBeenCalled();
     });
 
-    it("auto-detects scoped npm package type", async () => {
-      const result = await resolveLookup("@types/node");
-      expect(result.resolver).toBe("npm");
-      expect(result.type).toBe("npm");
-    });
+    it("passes correct search query to SearXNG", async () => {
+      mockSearchSearXNG.mockResolvedValue({
+        results: [],
+        totalResults: 0,
+        query: "install SomeWeirdApp",
+      });
 
-    it("returns error info when SearXNG fails and no resolver matches", async () => {
-      mockSearchSearXNG.mockRejectedValue(new Error("SearXNG unavailable"));
-
-      // Disable all resolvers to force SearXNG fallback
       const disabledConfig = {
         resolvers: {
           npm: { enabled: false },
@@ -117,7 +120,53 @@ describe("pidocs-core", () => {
         },
       };
 
-      const result = await resolveLookup("totally-unknown-xyz-123", { configOverride: disabledConfig });
+      await resolveLookup("SomeWeirdApp", { configOverride: disabledConfig });
+      expect(mockSearchSearXNG).toHaveBeenCalledWith(
+        "install SomeWeirdApp",
+        expect.objectContaining({ categories: "it", maxResults: 5 })
+      );
+    });
+
+    it("returns description from SearXNG snippets", async () => {
+      mockSearchSearXNG.mockResolvedValue({
+        results: [
+          {
+            title: "VLC",
+            url: "https://www.videolan.org/vlc/",
+            snippet: "VLC is a free and open source cross-platform multimedia player",
+            engines: ["google"],
+          },
+        ],
+        totalResults: 1,
+        query: "install VLC-media-player-xyz",
+      });
+
+      const disabledConfig = {
+        resolvers: {
+          npm: { enabled: false }, github: { enabled: false }, pip: { enabled: false },
+          cargo: { enabled: false }, brew: { enabled: false }, docker: { enabled: false },
+          vscode: { enabled: false }, go: { enabled: false }, aur: { enabled: false },
+          flatpak: { enabled: false }, snap: { enabled: false }, custom: [],
+        },
+      };
+
+      const result = await resolveLookup("VLC-media-player-xyz", { configOverride: disabledConfig });
+      expect(result.description).toContain("VLC is a free and open source");
+    });
+
+    it("returns error info when SearXNG fails and no resolver matches", async () => {
+      mockSearchSearXNG.mockRejectedValue(new Error("SearXNG unavailable"));
+
+      const disabledConfig = {
+        resolvers: {
+          npm: { enabled: false }, github: { enabled: false }, pip: { enabled: false },
+          cargo: { enabled: false }, brew: { enabled: false }, docker: { enabled: false },
+          vscode: { enabled: false }, go: { enabled: false }, aur: { enabled: false },
+          flatpak: { enabled: false }, snap: { enabled: false }, custom: [],
+        },
+      };
+
+      const result = await resolveLookup("123badname", { configOverride: disabledConfig });
       expect(result.resolver).toBe("searxng");
       expect(result.description).toContain("Search failed");
     });
@@ -126,7 +175,6 @@ describe("pidocs-core", () => {
   // ── resolveInstall ──
   describe("resolveInstall", () => {
     it("resolves install commands for npm package", async () => {
-      // Mock fetchText to return a page with install instructions
       mockFetchText.mockResolvedValue({
         stdout: "# Install\n\n```bash\nnpm install lodash\n```",
         stderr: "",
@@ -135,6 +183,7 @@ describe("pidocs-core", () => {
       const result = await resolveInstall("lodash", { typeHint: "npm" });
       expect(result.resolver).toBe("npm");
       expect(result.sourceUrl).toContain("npmjs.com");
+      expect(result.name).toBe("lodash");
     });
 
     it("returns source URL even when fetch fails", async () => {
@@ -167,9 +216,114 @@ describe("pidocs-core", () => {
 
       const result = await resolveInstall("lodash", { typeHint: "npm" });
       expect(result.resolver).toBe("npm");
-      // Should have the fallback npm install command
       expect(result.installCommands.length).toBeGreaterThanOrEqual(1);
       expect(result.installCommands[0].command).toContain("npm install lodash");
+    });
+
+    it("generates brew fallback when fetch fails", async () => {
+      mockFetchText.mockResolvedValue({
+        stdout: "",
+        stderr: "Error fetching page",
+      });
+
+      const result = await resolveInstall("ffmpeg", { typeHint: "brew" });
+      expect(result.installCommands).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ manager: "brew", command: "brew install ffmpeg" }),
+        ])
+      );
+    });
+
+    it("generates docker fallback when fetch fails", async () => {
+      mockFetchText.mockResolvedValue({
+        stdout: "",
+        stderr: "Error fetching page",
+      });
+
+      const result = await resolveInstall("nginx", { typeHint: "docker" });
+      expect(result.installCommands).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ manager: "docker", command: "docker pull nginx" }),
+        ])
+      );
+    });
+
+    it("filters install commands by platform", async () => {
+      mockFetchText.mockResolvedValue({
+        stdout: `
+          ## Installation
+          Linux: \`sudo apt install nginx\`
+          macOS: \`brew install nginx\`
+          Windows: \`choco install nginx\`
+          Cross-platform: \`docker pull nginx\`
+        `,
+        stderr: "",
+      });
+
+      // Linux only
+      const linuxResult = await resolveInstall("nginx", { typeHint: "apt", platform: "linux" });
+      const linuxManagers = linuxResult.installCommands.map((c) => c.manager);
+      expect(linuxManagers.every((m) => m === "apt" || m === "docker")).toBe(true);
+
+      // Mac only
+      const macResult = await resolveInstall("nginx", { typeHint: "brew", platform: "mac" });
+      const macManagers = macResult.installCommands.map((c) => c.manager);
+      expect(macManagers.every((m) => m === "brew" || m === "docker")).toBe(true);
+    });
+
+    it("returns all commands when platform is 'all' or undefined", async () => {
+      mockFetchText.mockResolvedValue({
+        stdout: `
+          \`\`\`bash
+          npm install lodash
+          \`\`\`
+          \`\`\`bash
+          brew install lodash
+          \`\`\`
+        `,
+        stderr: "",
+      });
+
+      const result = await resolveInstall("lodash-mc", { typeHint: "npm" });
+      // Should not filter — all commands returned
+      expect(result.installCommands.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("falls back to SearXNG when no resolver matches and returns commands", async () => {
+      mockSearchSearXNG.mockResolvedValue({
+        results: [
+          {
+            title: "VLC Download",
+            url: "https://www.videolan.org/vlc/",
+            snippet: "Download VLC media player",
+            engines: ["google"],
+          },
+        ],
+        totalResults: 1,
+        query: "how to install VLC-media-player-xyz",
+      });
+
+      mockFetchText.mockResolvedValue({
+        stdout: "## Install\n\n```bash\nsudo apt install vlc\n```",
+        stderr: "",
+      });
+
+      const disabledConfig = {
+        resolvers: {
+          npm: { enabled: false }, github: { enabled: false }, pip: { enabled: false },
+          cargo: { enabled: false }, brew: { enabled: false }, docker: { enabled: false },
+          vscode: { enabled: false }, go: { enabled: false }, aur: { enabled: false },
+          flatpak: { enabled: false }, snap: { enabled: false }, custom: [],
+        },
+      };
+
+      const result = await resolveInstall("VLC-media-player-xyz", { configOverride: disabledConfig });
+      expect(result.resolver).toBe("searxng");
+      expect(result.sourceUrl).toBe("https://www.videolan.org/vlc/");
+      expect(mockSearchSearXNG).toHaveBeenCalledWith(
+        "how to install VLC-media-player-xyz",
+        expect.objectContaining({ categories: "it", maxResults: 3 })
+      );
     });
   });
 });

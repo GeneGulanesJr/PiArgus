@@ -96,13 +96,14 @@ describe("getVmStatus", () => {
 });
 
 describe("interact", () => {
-  it("bootstraps VM and executes interaction successfully", async () => {
+    it("bootstraps VM and executes interaction successfully", async () => {
     mockImplementations.set([
       replyFail("not found"),     // 1: machine status — not found (will try create)
       replyOk("created\n"),       // 2: machine create
       replyOk("started\n"),       // 3: machine start
-      replyOk(""),                // 4: write interact script
-      replyOk("<html>clicked</html>"), // 5: node interact.js
+      replyOk("ready"),              // 4: waitForAgentReady echo check
+      replyOk(""),                // 5: write interact script
+      replyOk("<html>clicked</html>"), // 6: node interact.js
     ]);
 
     const result = await interact("https://example.com", [
@@ -117,8 +118,9 @@ describe("interact", () => {
     mockImplementations.set([
       replyOk("stopped\n"),       // 1: machine status — stopped (will just start)
       replyOk("started\n"),       // 2: machine start
-      replyOk(""),                // 3: write interact script
-      replyOk("<html>filled</html>"), // 4: node interact.js
+      replyOk("ready"),           // 3: waitForAgentReady echo check (new)
+      replyOk(""),                // 4: write interact script
+      replyOk("<html>filled</html>"), // 5: node interact.js
     ]);
 
     const result = await interact("https://example.com", [

@@ -56,9 +56,10 @@ function truncate(content: string): string {
 
 export default async function (pi: ExtensionAPI) {
 
-  // Auto-stop smolvm VMs on session shutdown
+  // Auto-stop search VM on session shutdown (it has a persistent exec session
+  // tied to this process). The browser VM is NOT stopped so other pi sessions
+  // can reuse it without a cold start.
   pi.on("session_shutdown", async () => {
-    try { await stopVm(); } catch { /* best-effort */ }
     try { await stopSearchVm(); } catch { /* best-effort */ }
   });
 

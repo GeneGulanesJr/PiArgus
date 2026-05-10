@@ -1,27 +1,23 @@
 # smolfier/browser.smolfile
 # Headless Chromium microVM for heavy-tier browser operations
-# Alpine + Node.js + Puppeteer for full browser automation
+# Uses pre-built image with Chromium + Puppeteer — no runtime network needed
 
-image = "alpine:edge"
+image = "docker.io/zenika/alpine-chrome:with-puppeteer"
 
 cpus = 4
 memory = 4096
 net = true
 
 env = [
-    "CHROME_BIN=/usr/bin/chromium",
-    "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium",
+    "CHROME_BIN=/usr/bin/chromium-browser",
+    "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser",
     "PUPPETEER_SKIP_DOWNLOAD=true",
-    "NODE_PATH=/usr/local/lib/node_modules",
-    "HOME=/root",
+    "NODE_PATH=/home/chrome/node_modules:/usr/lib/node_modules",
+    "HOME=/home/chrome",
 ]
 
 [dev]
 init = [
-    # Browser engine + fonts + Node.js runtime
-    "apk add --no-cache chromium font-opensans nodejs npm",
-    # Puppeteer (uses system Chromium, no download)
-    "npm install -g puppeteer-core@latest",
     # Ensure writable dirs for Chromium runtime
-    "mkdir -p /root /tmp/chrome-user-data",
+    "mkdir -p /home/chrome /tmp/chrome-user-data",
 ]

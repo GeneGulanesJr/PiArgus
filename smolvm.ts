@@ -77,8 +77,38 @@ export function isSmolvmInstalled(): boolean {
 
 // ─── CLI execution ─────────────────────────────────────────────────────────
 
-/** Execute a smolvm CLI command */
+/** Execute a smolvm CLI command with automatic DB lock retry.
+ *  Multiple pi sessions can compete for the smolvm SQLite DB.
+ *  Retries up to 3 times with a short delay when a lock error is detected.
+ */
 async function smolvmExec(
+  args: string[],
+  timeoutMs = 60_000
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const maxRetries = 3;
+  const lockRetryDelay = 2000;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const result = await rawSmolvmExec(args, timeoutMs);
+
+    // If DB is locked by another pi session, retry after a short delay
+    if (result.stderr.includes("Database already open") ||
+        result.stderr.includes("Cannot acquire lock")) {
+      if (attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, lockRetryDelay));
+        continue;
+      }
+    }
+
+    return result;
+  }
+
+  // Should not reach here, but return last attempt
+  return await rawSmolvmExec(args, timeoutMs);
+}
+
+/** Raw smolvm CLI execution (no retry) */
+async function rawSmolvmExec(
   args: string[],
   timeoutMs = 60_000
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
@@ -117,10 +147,15 @@ export async function ensureVm(): Promise<{ running: boolean; error?: string }> 
   if (status.exitCode === 0 && status.stdout.includes("stopped")) {
     const startResult = await smolvmExec(
       ["machine", "start", "--name", VM_NAME],
-      30_000
+      60_000  // init may re-run on start (apk add, npm install)
     );
     if (startResult.exitCode !== 0) {
       return { running: false, error: `Failed to start VM: ${startResult.stderr}` };
+    }
+    // Wait for the agent to accept exec commands
+    const ready = await waitForAgentReady();
+    if (!ready) {
+      return { running: false, error: "VM agent not ready after start" };
     }
     return { running: true };
   }
@@ -150,7 +185,35 @@ export async function ensureVm(): Promise<{ running: boolean; error?: string }> 
     return { running: false, error: `Failed to start VM: ${startResult.stderr}` };
   }
 
+  // After start (whether from stopped or fresh create), wait for the agent to be ready.
+  // The smolvm agent might still be initializing after 'machine start' returns.
+  const ready = await waitForAgentReady();
+  if (!ready) {
+    return { running: false, error: "VM agent not ready after start" };
+  }
+
   return { running: true };
+}
+
+/** Wait for the VM agent to accept exec commands.
+ * Uses a lightweight echo test instead of node to avoid cold-start delays.
+ * Returns true if agent responds within ~20 seconds.
+ */
+async function waitForAgentReady(retries = 10): Promise<boolean> {
+  const delayMs = 2000;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const result = await smolvmExec(
+        ["machine", "exec", "--name", VM_NAME, "--", "echo", "ready"],
+        3_000
+      );
+      if (result.exitCode === 0 && result.stdout.includes("ready")) return true;
+    } catch {
+      // ignore and retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return false;
 }
 
 /** Stop the VM */

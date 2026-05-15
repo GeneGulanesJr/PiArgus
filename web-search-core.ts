@@ -414,6 +414,12 @@ export async function researchQuery(
   // Extract query keywords for relevance scoring
   const queryKeywords = extractKeywords(query.toLowerCase());
 
+  // PERFORMANCE: Pre-compile keyword regexes once to avoid per-paragraph RegExp
+  // allocation. scoreParagraph is called ~1,000 times per researchQuery —
+  // constructing new RegExp(keyword, 'gi') each call yields ~10,000 allocations.
+  // DO NOT inline regex construction back into scoreParagraph without re-benchmarking.
+  const keywordRegexes = queryKeywords.map(kw => new RegExp(kw, "gi"));
+
   // Step 2: Fetch pages in parallel
   const fetchPromises = searchResult.results.slice(0, depth).map(async (r) => {
     const result = await fetchPageText(r.url, { stealth: researchOptions.stealth });
@@ -444,7 +450,7 @@ export async function researchQuery(
       .filter(p => p.length > 40 && p.length < 2000); // Filter noise
 
     for (const para of paragraphs) {
-      const score = scoreParagraph(para.toLowerCase(), queryKeywords);
+      const score = scoreParagraph(para.toLowerCase(), keywordRegexes);
       if (score > 0) {
         allParagraphs.push({
           text: para,
@@ -538,16 +544,24 @@ function extractKeywords(query: string): string[] {
     .filter(word => word.length > 2 && !STOP_WORDS.has(word));
 }
 
-/** Score a paragraph's relevance to the query keywords */
-function scoreParagraph(text: string, keywords: string[]): number {
+/** Score a paragraph's relevance to the query keywords.
+ *  PERFORMANCE: keywordRegexes MUST be pre-compiled outside this function —
+ *  constructing new RegExp per call costs ~10,000 allocations per researchQuery.
+ *  DO NOT revert to per-call RegExp construction without profiling. */
+function scoreParagraph(text: string, keywordRegexes: RegExp[]): number {
   let score = 0;
-  for (const kw of keywords) {
-    const count = (text.match(new RegExp(kw, "gi")) || []).length;
-    score += count * (kw.length > 5 ? 2 : 1); // Longer keywords score higher
+  let uniqueHits = 0;
+  const keywordCount = keywordRegexes.length;
+  for (let i = 0; i < keywordCount; i++) {
+    const regex = keywordRegexes[i];
+    const count = (text.match(regex) || []).length;
+    if (count > 0) {
+      uniqueHits++;
+      score += count * (regex.source.length > 5 ? 2 : 1); // Longer keywords score higher
+    }
   }
   // Boost paragraphs with multiple keyword hits (topic relevance)
-  const uniqueHits = keywords.filter(kw => text.includes(kw)).length;
-  if (uniqueHits >= Math.ceil(keywords.length * 0.5)) score += 5; // Majority match bonus
-  if (uniqueHits >= keywords.length) score += 10; // All keywords match
+  if (uniqueHits >= Math.ceil(keywordCount * 0.5)) score += 5; // Majority match bonus
+  if (uniqueHits >= keywordCount) score += 10; // All keywords match
   return score;
 }

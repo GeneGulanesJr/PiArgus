@@ -21,6 +21,7 @@ import {
 import {
   isSmolvmInstalled,
   ensureVm,
+  ensureSearchVm,
   stopVm,
   screenshot as smolvmScreenshot,
   interact,
@@ -508,7 +509,7 @@ export default async function (pi: ExtensionAPI) {
     promptSnippet: "Check browser infrastructure status or pre-warm heavy tier",
     promptGuidelines: [
       "Use action='status' to check what's available (default).",
-      "Use action='start' to pre-warm the smolvm VM before heavy operations.",
+      "Use action='start' to pre-warm the smolvm VM and SearXNG search VM before heavy or search operations.",
       "The heavy-tier VM boots in <200ms after first creation.",
     ],
     parameters: Type.Object({
@@ -532,14 +533,20 @@ export default async function (pi: ExtensionAPI) {
         }
 
         const ensure = await ensureVm();
+        const searchEnsure = await ensureSearchVm();
         return {
           content: [{
             type: "text",
-            text: ensure.running
-              ? "Heavy-tier VM (pi-browser-heavy) is running and ready for screenshots, clicks, and form fills."
-              : `Failed to start VM: ${ensure.error}`,
+            text: [
+              ensure.running
+                ? "✅ Heavy-tier VM (pi-browser-heavy) is running and ready for screenshots, clicks, and form fills."
+                : `❌ Heavy-tier VM failed: ${ensure.error}`,
+              searchEnsure.running
+                ? "✅ Search VM (pi-search-searxng) is running and ready for web searches."
+                : `⚠️  Search VM: ${searchEnsure.error || "not started"}`,
+            ].join("\n"),
           }],
-          details: { action: "start", vmRunning: ensure.running },
+          details: { action: "start", vmRunning: ensure.running, searchRunning: searchEnsure.running },
         };
       }
 

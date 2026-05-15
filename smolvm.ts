@@ -452,7 +452,12 @@ export async function getVmStatus(): Promise<SmolvmState> {
 
 // ─── Search VM (SearXNG) ────────────────────────────────────────────────────
 
-// ─── Search VM (SearXNG) ────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Concurrency guard — prevents parallel ensureSearchVm calls from racing.
+// Multiple pi sessions or parallel tool calls both hit this path.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let _ensureSearchVmPromise: Promise<{ running: boolean; url?: string; error?: string }> | null = null;
 
 /** Ensure the SearXNG search VM is created, running, and SearXNG is responding.
  *
@@ -466,8 +471,21 @@ export async function getVmStatus(): Promise<SmolvmState> {
  *  2. If VM not running → start it (settings.yml written by init on every start)
  *  3. Start Granian via persistent exec session
  *  4. Wait for healthz to return 200
+ *  5. If Granian fails to start, attempt one recovery cycle (kill session, restart)
  */
 export async function ensureSearchVm(): Promise<{ running: boolean; url?: string; error?: string }> {
+  // Deduplicate concurrent calls — return the in-flight promise
+  if (_ensureSearchVmPromise) return _ensureSearchVmPromise;
+
+  _ensureSearchVmPromise = _ensureSearchVmImpl();
+  try {
+    return await _ensureSearchVmPromise;
+  } finally {
+    _ensureSearchVmPromise = null;
+  }
+}
+
+async function _ensureSearchVmImpl(): Promise<{ running: boolean; url?: string; error?: string }> {
   if (!isSmolvmInstalled()) {
     return { running: false, error: "smolvm not installed. Install: curl -sSL https://smolmachines.com/install.sh | bash" };
   }
@@ -488,7 +506,7 @@ export async function ensureSearchVm(): Promise<{ running: boolean; url?: string
     }
     const createResult = await smolvmExec(
       ["machine", "create", SEARCH_VM_NAME, "-s", smolfilePath],
-      60_000
+      120_000
     );
     if (createResult.exitCode !== 0) {
       return { running: false, error: `Failed to create search VM: ${createResult.stderr}` };
@@ -500,38 +518,57 @@ export async function ensureSearchVm(): Promise<{ running: boolean; url?: string
   if (currentStatus.exitCode === 0 && currentStatus.stdout.includes("stopped")) {
     const startResult = await smolvmExec(
       ["machine", "start", "--name", SEARCH_VM_NAME],
-      60_000
+      120_000
     );
     if (startResult.exitCode !== 0) {
       return { running: false, error: `Failed to start search VM: ${startResult.stderr}` };
     }
   }
 
-  // 3. Ensure settings.yml has JSON format enabled (init should have done this, but verify)
-  // If JSON format is missing, rewrite the entire settings (atomic replacement)
-  const settingsCheck = await vmSearchExec(
-    ["sh", "-c", "grep -q 'json' /etc/searxng/settings.yml; echo $?"],
-    { timeout: 5_000 }
-  );
-  if (settingsCheck.stdout.trim() !== "0") {
-    await vmSearchExec(
-      ["sh", "-c", "cat > /etc/searxng/settings.yml << 'YAMLEOF'\n" +
-        "use_default_settings: true\n" +
-        "search:\n  safe_search: 0\n  formats:\n    - html\n    - json\n" +
-        "server:\n  limiter: false\n  image_proxy: false\n  secret_key: piargus-search-2026\n" +
-        "valkey:\n  url: false\n" +
-        "YAMLEOF"],
+  // 3. Ensure settings.yml has JSON format enabled.
+  // Only attempt if the smolvm agent is reachable (persistent exec may block it).
+  const agentReachable = currentStatus.stdout.includes("running") && !currentStatus.stdout.includes("unreachable");
+  if (agentReachable) {
+    const settingsCheck = await vmSearchExec(
+      ["sh", "-c", "grep -q 'json' /etc/searxng/settings.yml; echo $?"],
       { timeout: 5_000 }
     );
+    if (settingsCheck.stdout.trim() !== "0") {
+      await vmSearchExec(
+        ["sh", "-c", "cat > /etc/searxng/settings.yml << 'YAMLEOF'\n" +
+          "use_default_settings: true\n" +
+          "search:\n  safe_search: 0\n  formats:\n    - html\n    - json\n" +
+          "server:\n  limiter: false\n  image_proxy: false\n  secret_key: piargus-search-2026\n" +
+          "valkey:\n  url: false\n" +
+          "YAMLEOF"],
+        { timeout: 5_000 }
+      );
+    }
   }
 
   // 4. Start Granian via persistent exec session (keeps process alive)
   await startGranianSession();
 
-  // 5. Wait for SearXNG to be ready
-  const ready = await waitForSearXNG(20);
+  // 5. Wait for SearXNG to be ready (up to 30s for cold starts)
+  let ready = await waitForSearXNG(60);  // 60 × 500ms = 30s
   if (ready) return { running: true, url: SEARXNG_LOCAL_URL };
-  return { running: false, error: "SearXNG failed to respond (check: smolvm machine exec --name pi-search-searxng -- cat /tmp/granian.log)" };
+
+  // 6. Recovery: kill the session and try one more time
+  // The first attempt might have failed due to a stale exec session
+  // occupying the smolvm agent connection.
+  if (searchVmProcess) {
+    try { searchVmProcess.kill(); } catch { /* ignore */ }
+    searchVmProcess = null;
+  }
+  // Brief pause to let smolvm release the connection
+  await new Promise((r) => setTimeout(r, 1000));
+
+  await startGranianSession();
+  ready = await waitForSearXNG(40);  // 40 × 500ms = 20s
+  if (ready) return { running: true, url: SEARXNG_LOCAL_URL };
+
+  return { running: false, error: "SearXNG failed to respond after two attempts. " +
+    "Check: smolvm machine exec --name pi-search-searxng -- cat /tmp/granian.log" };
 }
 
 /** Stop the search VM (kills Granian session + stops VM) */
@@ -588,9 +625,13 @@ async function vmSearchExec(
  *  smolvm kills background processes when exec sessions end,
  *  so we keep the session alive by spawning a detached child that
  *  stays in a wait loop on Granian's PID.
+ *
+ *  Uses execFile (not spawn) so we can verify the smolvm `machine exec`
+ *  actually establishes its connection before resolving. The Granian startup
+ *  itself is handled by waitForSearXNG polling.
  */
 function startGranianSession(): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const bin = SMOLVM_PATH();
 
     // Kill any existing persistent session
@@ -599,6 +640,8 @@ function startGranianSession(): Promise<void> {
       searchVmProcess = null;
     }
 
+    // Use execFile with a reasonable timeout — smolvm machine exec should
+    // establish the connection within a few seconds, then we detach.
     const child = spawn(bin, [
       "machine", "exec",
       "--name", SEARCH_VM_NAME,
@@ -606,14 +649,48 @@ function startGranianSession(): Promise<void> {
       "sh", "-c", GRANIAN_KEEPALIVE_SCRIPT,
     ], {
       detached: true,
-      stdio: "ignore", // prevent piped stdio from keeping process alive
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
-    child.unref();
     searchVmProcess = child;
 
-    // Give the process a moment to start before resolving
-    setTimeout(resolve, 500);
+    let settled = false;
+    const settle = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) {
+        searchVmProcess = null;
+        reject(err);
+      } else {
+        // Detach — process keeps running in background
+        child.unref();
+        resolve();
+      }
+    };
+
+    // Wait for smolvm to print the Granian PID (indicates exec session is live)
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    child.on("error", (err) => settle(err));
+    child.on("exit", (code) => {
+      if (!settled) {
+        settle(new Error(`smolvm machine exec exited with code ${code}. stderr: ${stderr.slice(0, 500)}`));
+      }
+    });
+
+    // Timeout: if smolvm can't establish the exec session within 15s, fail
+    const timer = setTimeout(() => {
+      settle(new Error(`smolvm machine exec timed out after 15s. stderr: ${stderr.slice(0, 500)}`));
+    }, 15_000);
+
+    // Resolve once we get a PID from Granian (means exec session is active)
+    const check = (chunk: Buffer) => {
+      stderr += chunk.toString();
+      if (stderr.includes("Granian PID:")) settle();
+    };
+    child.stderr?.on("data", check);
   });
 }
 

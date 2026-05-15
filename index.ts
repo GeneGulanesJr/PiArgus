@@ -77,6 +77,27 @@ export default async function (pi: ExtensionAPI) {
   registerPidocs(pi);
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ENSURE TOOL VISIBILITY — In fresh/new pi setups, the async extension
+  // factory can race with pi's initial _refreshToolRegistry(). This hook
+  // force-activates PiArgus tools on session_start so they appear in the
+  // "Available tools" section and the LLM can call them automatically.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  pi.on("session_start", () => {
+    const active = pi.getActiveTools();
+    const piargusTools = [
+      "WEB_Search", "WEB_Research",
+      "pidocs_lookup", "pidocs_install",
+      "browser_navigate", "browser_fetch", "browser_screenshot",
+      "browser_action", "browser_scrape", "browser_vm_status",
+    ];
+    const missing = piargusTools.filter((n) => !active.includes(n));
+    if (missing.length > 0) {
+      pi.setActiveTools([...active, ...missing]);
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // TOOL: browser_navigate (LIGHT — Obscura)
   // ═══════════════════════════════════════════════════════════════════════════
 

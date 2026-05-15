@@ -12,7 +12,7 @@ env = [
     "CHROME_BIN=/usr/bin/chromium-browser",
     "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser",
     "PUPPETEER_SKIP_DOWNLOAD=true",
-    "NODE_PATH=/home/chrome/node_modules:/usr/lib/node_modules",
+    "NODE_PATH=/home/chrome/node_modules:/usr/lib/node_modules:/usr/src/app/node_modules",
     "HOME=/home/chrome",
 ]
 

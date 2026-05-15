@@ -243,8 +243,10 @@ export async function vmExec(
   return smolvmExec(args, opts?.timeout ?? 60_000);
 }
 
-/** NODE_PATH for global npm modules inside the VM */
-const NODE_PATH = "/usr/local/lib/node_modules";
+/** NODE_PATH for global npm modules inside the VM.
+ *  Must include /usr/src/app/node_modules — the zenika/alpine-chrome image
+ *  installs puppeteer-core there, not under /usr/local/lib. */
+const NODE_PATH = "/usr/local/lib/node_modules:/usr/src/app/node_modules";
 
 // ─── Screenshot ────────────────────────────────────────────────────────────
 
@@ -560,8 +562,10 @@ async function _ensureSearchVmImpl(): Promise<{ running: boolean; url?: string; 
     try { searchVmProcess.kill(); } catch { /* ignore */ }
     searchVmProcess = null;
   }
-  // Brief pause to let smolvm release the connection
-  await new Promise((r) => setTimeout(r, 1000));
+  // Brief pause to let smolvm release the agent connection.
+  // The old persistent exec session occupies the agent; the kernel may
+  // take >1s to fully reap the killed child and free the connection.
+  await new Promise((r) => setTimeout(r, 3_000));
 
   await startGranianSession();
   ready = await waitForSearXNG(40);  // 40 × 500ms = 20s
@@ -680,10 +684,11 @@ function startGranianSession(): Promise<void> {
       }
     });
 
-    // Timeout: if smolvm can't establish the exec session within 15s, fail
+    // Timeout: if smolvm can't establish the exec session within 30s, fail.
+    // Cold-start image pulls and agent init can push beyond 15s.
     const timer = setTimeout(() => {
-      settle(new Error(`smolvm machine exec timed out after 15s. stderr: ${stderr.slice(0, 500)}`));
-    }, 15_000);
+      settle(new Error(`smolvm machine exec timed out after 30s. stderr: ${stderr.slice(0, 500)}`));
+    }, 30_000);
 
     // Resolve once we get a PID from Granian (means exec session is active)
     const check = (chunk: Buffer) => {

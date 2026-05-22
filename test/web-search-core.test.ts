@@ -272,7 +272,7 @@ describe("formatResultsCompact", () => {
     const text = formatResultsCompact(response);
 
     // Should be one line per result (plus header line)
-    expect(text).toContain('Results for "fastapi dependency injection"');
+    expect(text).toContain('Results: "fastapi dependency injection" (1/142)');
     expect(text).toContain("1. FastAPI Tutorial 2025-03-15");
     expect(text).toContain("fastapi.tiangolo.com/tutorial/dependencies");
     expect(text).toContain("[google,brave]");

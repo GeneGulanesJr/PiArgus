@@ -42,6 +42,12 @@ function getSearXNGUrl(): string {
 export const DEFAULT_MAX_RESULTS = 10;
 const SEARCH_TIMEOUT_MS = 30_000;
 
+
+function compactWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+
 export async function searchSearXNG(
   query: string,
   options: {
@@ -143,13 +149,13 @@ function parseHtmlResults(html: string): SearchResult[] {
     // Extract title
     const titleMatch = titleRegex.exec(block);
     const title = titleMatch
-      ? decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, "").trim())
+      ? compactWhitespace(decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, "")))
       : "";
 
     // Extract snippet/content
     const snippetMatch = snippetRegex.exec(block);
     const snippet = snippetMatch
-      ? decodeHtmlEntities(snippetMatch[1].replace(/<[^>]+>/g, "").trim())
+      ? compactWhitespace(decodeHtmlEntities(snippetMatch[1].replace(/<[^>]+>/g, "")))
       : "";
 
     // Extract engine names
@@ -179,7 +185,7 @@ function parseHtmlResults(html: string): SearchResult[] {
     while ((linkMatch = simpleLinkRegex.exec(html)) !== null) {
       links.push({
         url: linkMatch[1],
-        title: decodeHtmlEntities(linkMatch[2].replace(/<[^>]+>/g, "").trim()),
+        title: compactWhitespace(decodeHtmlEntities(linkMatch[2].replace(/<[^>]+>/g, ""))),
       });
     }
 
@@ -187,7 +193,7 @@ function parseHtmlResults(html: string): SearchResult[] {
     const snippets: string[] = [];
     let snipMatch: RegExpExecArray | null;
     while ((snipMatch = simpleSnippetRegex.exec(html)) !== null) {
-      const text = snipMatch[1].replace(/<[^>]+>/g, "").trim();
+      const text = compactWhitespace(snipMatch[1].replace(/<[^>]+>/g, ""));
       if (text.length > 20) snippets.push(decodeHtmlEntities(text));
     }
 
@@ -299,7 +305,7 @@ export function formatResultsCompact(searchResult: SearchResponse): string {
   }
 
   const lines: string[] = [
-    `Results for "${query}" (${totalResults} total, showing ${results.length}):`,
+    `Results: "${query}" (${results.length}/${totalResults})`,
   ];
 
   for (let i = 0; i < results.length; i++) {
@@ -395,7 +401,7 @@ export async function researchQuery(
   const maxContentChars = researchOptions.maxContentChars ?? 4000;
 
   // Step 1: Search
-  const searchResult = await searchSearXNG(query, {
+  const searchResult = await searchWeb(query, {
     ...searchOptions,
     maxResults: depth,
   });
@@ -446,7 +452,7 @@ export async function researchQuery(
 
     const paragraphs = page.text
       .split(/\n{2,}/) // Split on double newlines
-      .map(p => p.trim())
+      .map(p => compactWhitespace(p))
       .filter(p => p.length > 40 && p.length < 2000); // Filter noise
 
     for (const para of paragraphs) {
@@ -498,7 +504,6 @@ export async function researchQuery(
 
     for (const s of selected) {
       lines.push(`[${s.source.domain}] ${s.text}`);
-      lines.push("");
     }
 
     lines.push("Sources:");
@@ -564,4 +569,63 @@ function scoreParagraph(text: string, keywordRegexes: RegExp[]): number {
   if (uniqueHits >= Math.ceil(keywordCount * 0.5)) score += 5; // Majority match bonus
   if (uniqueHits >= keywordCount) score += 10; // All keywords match
   return score;
+}
+
+/**
+ * DuckDuckGo-backed web search used by web_search/web_research.
+ * This intentionally avoids the local SearXNG/smolvm dependency.
+ */
+export async function searchWeb(
+  query: string,
+  options: {
+    categories?: string;
+    language?: string;
+    timeRange?: string;
+    maxResults?: number;
+    pageno?: number;
+  }
+): Promise<SearchResponse> {
+  const maxResults = options.maxResults ?? DEFAULT_MAX_RESULTS;
+  const params = new URLSearchParams();
+  params.set("q", query);
+  params.set("kl", options.language && options.language !== "auto" ? `${options.language}-${options.language}` : "us-en");
+
+  const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+    signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`DuckDuckGo returned HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  if (typeof (response as any).text !== "function") {
+    return searchSearXNG(query, options);
+  }
+
+  const html = await response.text();
+  const results: SearchResult[] = [];
+  const blockRegex = /<div[^>]*class="result__body"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
+  const linkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;
+  const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>|<div[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/div>/i;
+  let m: RegExpExecArray | null;
+  while ((m = blockRegex.exec(html)) !== null && results.length < maxResults) {
+    const block = m[1];
+    const link = linkRegex.exec(block);
+    if (!link) continue;
+    const rawUrl = decodeURIComponent(link[1]);
+    const title = compactWhitespace(decodeHtmlEntities(link[2].replace(/<[^>]+>/g, " ")));
+    const sn = snippetRegex.exec(block);
+    const snippetRaw = sn ? (sn[1] || sn[2] || "") : "";
+    const snippet = compactWhitespace(decodeHtmlEntities(snippetRaw.replace(/<[^>]+>/g, " ")));
+    if (!rawUrl.startsWith("http") || !title || title.length < 4) continue;
+    if (results.some((r) => r.url === rawUrl)) continue;
+    results.push({ title, url: rawUrl, snippet, engines: ["duckduckgo"] });
+  }
+
+  return { results, totalResults: results.length, query };
 }

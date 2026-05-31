@@ -65,7 +65,7 @@ export default async function (pi: ExtensionAPI) {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: WEB_Search (SearXNG metasearch)
+  // TOOL: web_search (SearXNG metasearch)
   // ═══════════════════════════════════════════════════════════════════════════
 
   registerWebSearch(pi);
@@ -87,7 +87,7 @@ export default async function (pi: ExtensionAPI) {
   pi.on("session_start", () => {
     const active = pi.getActiveTools();
     const piargusTools = [
-      "WEB_Search", "WEB_Research",
+      "web_search", "web_research",
       "pidocs_lookup", "pidocs_install",
       "browser_navigate", "browser_fetch", "browser_screenshot",
       "browser_action", "browser_scrape", "browser_vm_status",

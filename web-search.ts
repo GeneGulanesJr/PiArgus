@@ -1,8 +1,8 @@
 // web-search.ts — SearXNG search + research tool registration for PiArgus
 //
 // Two tools:
-//   WEB_Search  — compact discovery: titles, domains, ~80 char snippets
-//   WEB_Research — deep dive: search → fetch top N → keyword-extract relevant content
+//   web_search  — compact discovery: titles, domains, ~80 char snippets
+//   web_research — deep dive: search → fetch top N → keyword-extract relevant content
 //
 // Thin wrapper imports pure logic from web-search-core.ts and binds it
 // to Pi's ExtensionAPI / TypeBox schema layer.
@@ -10,54 +10,30 @@
 import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
-  searchSearXNG,
+  searchWeb,
   formatResultsCompact,
   researchQuery,
   DEFAULT_MAX_RESULTS,
   type SearchResponse,
 } from "./web-search-core";
-import { ensureSearchVm, SEARXNG_LOCAL_URL, isSmolvmInstalled } from "./smolvm";
 import { fetchText } from "./obscura";
 
-export { searchSearXNG, formatResultsCompact, DEFAULT_MAX_RESULTS } from "./web-search-core";
+export { searchWeb, formatResultsCompact, DEFAULT_MAX_RESULTS } from "./web-search-core";
 export type { SearchResult, SearchResponse } from "./web-search-core";
 
-// ─── Shared: auto-ensure SearXNG VM ──────────────────────────────────────────
+// ─── Shared: web search provider (DuckDuckGo) ───────────────────────────────────
 
-async function ensureSearXNG(): Promise<{ url: string | null; error?: string }> {
-  const configuredUrl = process.env.SEARXNG_URL;
-  const useLocalSmolvm = !configuredUrl || configuredUrl === SEARXNG_LOCAL_URL;
-
-  if (useLocalSmolvm && isSmolvmInstalled()) {
-    const ensure = await ensureSearchVm();
-    if (!ensure.running) {
-      return {
-        url: null,
-        error: `Failed to start SearXNG search VM: ${ensure.error}\n` +
-          `Set SEARXNG_URL to point to an external SearXNG instance, or install smolvm.`,
-      };
-    }
-    return { url: ensure.url || SEARXNG_LOCAL_URL };
-  }
-
-  return { url: configuredUrl || SEARXNG_LOCAL_URL };
-}
-
-// ─── TOOL: WEB_Search (compact discovery) ────────────────────────────────────
+// ─── TOOL: web_search (compact discovery) ────────────────────────────────────
 
 export function registerWebSearch(pi: ExtensionAPI) {
   pi.registerTool({
-    name: "WEB_Search",
+    name: "web_search",
     label: "Web Search",
     description:
-      "Search the web using a SearXNG metasearch engine. Returns results with " +
-      "titles, URLs, and snippets from multiple search engines (Google, Brave, " +
-      "DuckDuckGo, etc.). Use this to find current information, documentation, " +
-      "solutions, or any web content. The SearXNG instance aggregates results " +
-      "from multiple search engines for better coverage.",
+      "Search the web using DuckDuckGo and return titles, URLs, and snippets. Use this to find current information, documentation, solutions, or any web content.",
     promptSnippet: "Search the web for current information, documentation, or solutions",
     promptGuidelines: [
-      "Use WEB_Search when you need current information not available in the codebase or indexed docs.",
+      "Use web_search when you need current information not available in the codebase or indexed docs.",
       "Prefer specific queries over vague ones for better results.",
       "Use categories like 'it', 'science', or 'news' to narrow results when appropriate.",
       "You can search for error messages, library docs, API references, or general knowledge.",
@@ -115,18 +91,8 @@ export function registerWebSearch(pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const { url: searxngUrl, error: vmError } = await ensureSearXNG();
-
-      if (vmError) {
-        return {
-          content: [{ type: "text" as const, text: vmError }],
-          details: { query: params.query, error: vmError },
-          isError: true,
-        };
-      }
-
       try {
-        const searchResult = await searchSearXNG(params.query, {
+        const searchResult = await searchWeb(params.query, {
           categories: params.categories,
           language: params.language,
           timeRange: params.time_range,
@@ -155,7 +121,7 @@ export function registerWebSearch(pi: ExtensionAPI) {
           content: [{
             type: "text" as const,
             text: isTimeout
-              ? `Web search timed out for "${params.query}". The SearXNG instance at ${searxngUrl} may be slow or unreachable. Try a simpler query or check the server.`
+              ? `Web search timed out for "${params.query}". DuckDuckGo may be slow or unreachable. Try a simpler query.`
               : `Web search failed for "${params.query}": ${message}`,
           }],
           details: { query: params.query, error: message },
@@ -166,11 +132,11 @@ export function registerWebSearch(pi: ExtensionAPI) {
   });
 }
 
-// ─── TOOL: WEB_Research (deep search with extraction) ────────────────────────
+// ─── TOOL: web_research (deep search with extraction) ────────────────────────
 
 export function registerWebResearch(pi: ExtensionAPI) {
   pi.registerTool({
-    name: "WEB_Research",
+    name: "web_research",
     label: "Web Research",
     description:
       "Deep web research: searches the web, fetches the most relevant pages, " +
@@ -179,11 +145,11 @@ export function registerWebResearch(pi: ExtensionAPI) {
       "Use this when you need detailed answers, not just search results.",
     promptSnippet: "Research a topic in depth with source extraction",
     promptGuidelines: [
-      "Use WEB_Research when you need detailed information, not just search result titles.",
+      "Use web_research when you need detailed information, not just search result titles.",
       "Good for answering specific questions where you need to read and synthesize web content.",
       "Works best with specific queries — 'Python asyncio subprocess timeout handling' over 'asyncio subprocess'.",
       "Returns only relevant paragraphs scored against your query, minimizing context pollution.",
-      "For quick discovery, use WEB_Search instead. For depth, use WEB_Research.",
+      "For quick discovery, use web_search instead. For depth, use web_research.",
     ],
     parameters: Type.Object({
       query: Type.String({
@@ -239,16 +205,6 @@ export function registerWebResearch(pi: ExtensionAPI) {
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const { error: vmError } = await ensureSearXNG();
-
-      if (vmError) {
-        return {
-          content: [{ type: "text" as const, text: vmError }],
-          details: { query: params.query, error: vmError },
-          isError: true,
-        };
-      }
-
       try {
         const result = await researchQuery(
           params.query,

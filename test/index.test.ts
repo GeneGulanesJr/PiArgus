@@ -59,10 +59,10 @@ describe("PiArgus extension registration", () => {
     expect(mockPi.on).toHaveBeenCalledWith("session_shutdown", expect.any(Function));
   });
 
-  it("registers 6 browser tools plus delegates WEB_Search and WEB_Research", () => {
+  it("registers 6 browser tools plus delegates web_search and web_research", () => {
     // 6 browser tools + 2 pidocs tools registered directly in index.ts
     expect(mockPi.registerTool).toHaveBeenCalledTimes(8);
-    // WEB_Search and WEB_Research are registered via registerWebSearch/registerWebResearch
+    // web_search and web_research are registered via registerWebSearch/registerWebResearch
     expect(mockRegisterWebSearch).toHaveBeenCalledWith(mockPi);
     expect(mockRegisterWebResearch).toHaveBeenCalledWith(mockPi);
   });
@@ -106,10 +106,10 @@ describe("PiArgus extension registration", () => {
     expect(names).not.toContain("browser_obscura_serve");
   });
 
-  it("does not register WEB_Search or WEB_Research tools directly (registered via registerWebSearch/registerWebResearch)", () => {
+  it("does not register web_search or web_research tools directly (registered via registerWebSearch/registerWebResearch)", () => {
     const names = registeredTools.map((t) => t.name);
-    expect(names).not.toContain("WEB_Search");
-    expect(names).not.toContain("WEB_Research");
+    expect(names).not.toContain("web_search");
+    expect(names).not.toContain("web_research");
   });
 
   it("browser_fetch has a mode parameter with union type", () => {

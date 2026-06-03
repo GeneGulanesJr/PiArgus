@@ -20,6 +20,7 @@ vi.mock("../docker", () => ({
   getContainerStatus: vi.fn().mockResolvedValue("running"),
   getSearchVmStatus: vi.fn().mockResolvedValue("running"),
   ensureSearchVm: vi.fn().mockResolvedValue({ running: true, url: "http://localhost:8888" }),
+  invalidateContainerCache: vi.fn(),
   SEARXNG_LOCAL_URL: "http://localhost:8888",
 }));
 

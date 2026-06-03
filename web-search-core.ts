@@ -596,7 +596,8 @@ function scoreParagraph(text: string, keywordRegexes: RegExp[]): number {
 
 /**
  * DuckDuckGo-backed web search used by web_search/web_research.
- * Routes through the Obscura binary inside the Docker container.
+ * Routes through the Obscura binary inside the Docker container when available,
+ * falls back to direct HTTP fetch when the container is not running.
  */
 export async function searchWeb(
   query: string,
@@ -616,25 +617,43 @@ export async function searchWeb(
   const ddgUrl = `https://html.duckduckgo.com/html/?${params.toString()}`;
 
   const ensure = await ensureContainer();
-  if (!ensure.running) {
-    throw new Error(`Container not running: ${ensure.error}`);
-  }
-  const containerName = getContainerName();
-
-  let html: string;
-  try {
-    const { stdout } = await execFileAsync("docker", [
-      "exec", containerName,
-      "obscura", "fetch", ddgUrl, "--dump", "html", "--quiet",
-    ], {
-      timeout: SEARCH_TIMEOUT_MS,
-      maxBuffer: 50 * 1024 * 1024,
-    });
-    html = stdout;
-  } catch (err: any) {
-    throw new Error(`DuckDuckGo fetch via container failed: ${err.message || err}`);
+  if (ensure.running) {
+    try {
+      const containerName = getContainerName();
+      const { stdout } = await execFileAsync("docker", [
+        "exec", containerName,
+        "obscura", "fetch", ddgUrl, "--dump", "html", "--quiet",
+      ], {
+        timeout: SEARCH_TIMEOUT_MS,
+        maxBuffer: 50 * 1024 * 1024,
+      });
+      return parseDDGResults(stdout, maxResults, query);
+    } catch {
+      // Fall through to direct HTTP fetch
+    }
   }
 
+  return searchWebDirect(ddgUrl, maxResults, query);
+}
+
+async function searchWebDirect(ddgUrl: string, maxResults: number, query: string): Promise<SearchResponse> {
+  const response = await fetch(ddgUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+    signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`DuckDuckGo returned HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const html = await response.text();
+  return parseDDGResults(html, maxResults, query);
+}
+
+function parseDDGResults(html: string, maxResults: number, query: string): SearchResponse {
   const results: SearchResult[] = [];
   const blockRegex = /<div[^>]*class="result__body"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
   const linkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;

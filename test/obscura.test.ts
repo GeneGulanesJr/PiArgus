@@ -6,6 +6,7 @@ vi.mock("../docker", () => ({
   ensureContainer: vi.fn().mockResolvedValue({ running: true }),
   getContainerName: () => "piargus",
   isDockerInstalled: () => true,
+  invalidateContainerCache: vi.fn(),
 }));
 
 vi.mock("node:child_process", () => ({

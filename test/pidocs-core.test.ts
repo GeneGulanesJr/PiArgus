@@ -20,6 +20,7 @@ vi.mock("../obscura", () => ({
 vi.mock("../docker", () => ({
   ensureSearchVm: vi.fn().mockResolvedValue({ running: true, url: "http://localhost:8888" }),
   isDockerInstalled: vi.fn().mockReturnValue(true),
+  invalidateContainerCache: vi.fn(),
   SEARXNG_LOCAL_URL: "http://localhost:8888",
 }));
 

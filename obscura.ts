@@ -2,7 +2,7 @@
 
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
-import { ensureContainer, getContainerName, isDockerInstalled } from "./docker";
+import { ensureContainer, getContainerName, isDockerInstalled, invalidateContainerCache } from "./docker";
 
 const execFileAsync = promisify(execFileCb);
 
@@ -24,6 +24,7 @@ export async function execAsync(
     });
     return { stdout, stderr };
   } catch (err: any) {
+    invalidateContainerCache();
     return {
       stdout: err.stdout || "",
       stderr: err.stderr || err.message,

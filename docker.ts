@@ -11,10 +11,15 @@ import type { ContainerState } from "./types";
 const execFileAsync = promisify(execFileCb);
 
 const CONTAINER_NAME = "piargus";
-const DOCKER_IMAGE = "piargus";
+const DOCKER_IMAGE = process.env.PIARGUS_DOCKER_IMAGE || "piargus";
+const CACHE_TTL_MS = 30_000;
 
-export const SEARXNG_PORT = 8888;
+export const SEARXNG_PORT = parseInt(process.env.PIARGUS_SEARXNG_PORT || "8888", 10);
+export const CHROME_PORT = parseInt(process.env.PIARGUS_CHROME_PORT || "9222", 10);
 export const SEARXNG_LOCAL_URL = `http://localhost:${SEARXNG_PORT}`;
+
+let _cacheRunning = false;
+let _cacheCheckedAt = 0;
 
 export type InteractionAction =
   | { type: "click"; selector: string }
@@ -82,7 +87,16 @@ async function containerExec(
 
 let _ensureContainerPromise: Promise<{ running: boolean; error?: string }> | null = null;
 
+export function invalidateContainerCache(): void {
+  _cacheRunning = false;
+  _cacheCheckedAt = 0;
+}
+
 export async function ensureContainer(): Promise<{ running: boolean; error?: string }> {
+  if (_cacheRunning && Date.now() - _cacheCheckedAt < CACHE_TTL_MS) {
+    return { running: true };
+  }
+
   if (_ensureContainerPromise) return _ensureContainerPromise;
 
   _ensureContainerPromise = _ensureContainerImpl();
@@ -103,50 +117,67 @@ async function _ensureContainerImpl(): Promise<{ running: boolean; error?: strin
   const inspect = await dockerExec(["inspect", "--format={{.State.Status}}", name], 5_000);
 
   if (inspect.exitCode === 0 && inspect.stdout.trim() === "running") {
+    _cacheRunning = true;
+    _cacheCheckedAt = Date.now();
     return { running: true };
   }
 
   if (inspect.exitCode === 0 && inspect.stdout.trim() === "exited") {
     const startResult = await dockerExec(["start", name], 30_000);
     if (startResult.exitCode !== 0) {
+      _cacheRunning = false;
       return { running: false, error: `Failed to start container: ${startResult.stderr}` };
     }
     const ready = await waitForContainerReady();
     if (!ready) {
+      _cacheRunning = false;
       return { running: false, error: "Container not ready after start" };
     }
+    _cacheRunning = true;
+    _cacheCheckedAt = Date.now();
     return { running: true };
   }
 
   if (inspect.exitCode === 0 && inspect.stdout.trim() === "paused") {
     const unpauseResult = await dockerExec(["unpause", name], 15_000);
     if (unpauseResult.exitCode !== 0) {
+      _cacheRunning = false;
       return { running: false, error: `Failed to unpause container: ${unpauseResult.stderr}` };
     }
     const ready = await waitForContainerReady();
     if (!ready) {
+      _cacheRunning = false;
       return { running: false, error: "Container not ready after unpause" };
     }
+    _cacheRunning = true;
+    _cacheCheckedAt = Date.now();
     return { running: true };
   }
 
   if (inspect.exitCode === 0) {
     const status = inspect.stdout.trim();
-    if (status === "created" || status === "dead" || status === "restarting") {
+    if (status === "removing") {
+      await waitForContainerRemoval(name);
+    } else if (status === "created" || status === "dead" || status === "restarting") {
       await dockerExec(["rm", "-f", name], 10_000);
     }
   }
 
+  _cacheRunning = false;
   const runResult = await dockerExec([
     "run", "-d",
     "--name", name,
-    "-p", "127.0.0.1:9222:9222",
+    "-p", `127.0.0.1:${CHROME_PORT}:9222`,
     "-p", `127.0.0.1:${SEARXNG_PORT}:8080`,
     DOCKER_IMAGE,
   ], 120_000);
 
   if (runResult.exitCode !== 0) {
-    return { running: false, error: `Failed to create container: ${runResult.stderr}` };
+    const stderr = runResult.stderr;
+    if (stderr.includes("port is already allocated")) {
+      return { running: false, error: `Port ${CHROME_PORT} or ${SEARXNG_PORT} is already in use. Stop the conflicting service or change PIARGUS_CHROME_PORT/PIARGUS_SEARXNG_PORT.` };
+    }
+    return { running: false, error: `Failed to create container: ${stderr}` };
   }
 
   const ready = await waitForContainerReady();
@@ -154,7 +185,18 @@ async function _ensureContainerImpl(): Promise<{ running: boolean; error?: strin
     return { running: false, error: "Container not ready after creation" };
   }
 
+  _cacheRunning = true;
+  _cacheCheckedAt = Date.now();
   return { running: true };
+}
+
+async function waitForContainerRemoval(name: string, retries = 15): Promise<void> {
+  const delayMs = 1000;
+  for (let i = 0; i < retries; i++) {
+    const result = await dockerExec(["inspect", "--format={{.State.Status}}", name], 3_000);
+    if (result.exitCode !== 0) return;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
 }
 
 async function waitForContainerReady(retries = 15): Promise<boolean> {
@@ -371,11 +413,14 @@ export async function ensureSearchVm(): Promise<{ running: boolean; url?: string
 }
 
 export async function stopContainer(): Promise<{ stopped: boolean; error?: string }> {
+  _cacheRunning = false;
+  _cacheCheckedAt = 0;
   const name = getContainerName();
-  const result = await dockerExec(["stop", name], 15_000);
-  if (result.exitCode !== 0 && !result.stderr.includes("No such container")) {
-    return { stopped: false, error: result.stderr };
+  const stopResult = await dockerExec(["stop", name], 15_000);
+  if (stopResult.exitCode !== 0 && !stopResult.stderr.includes("No such container")) {
+    return { stopped: false, error: stopResult.stderr };
   }
+  await dockerExec(["rm", name], 10_000);
   return { stopped: true };
 }
 

@@ -57,10 +57,11 @@ vi.mock("node:fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { isDockerInstalled, getContainerStatus, getContainerName, interact } from "../docker";
+import { isDockerInstalled, getContainerStatus, getContainerName, interact, invalidateContainerCache } from "../docker";
 
 beforeEach(() => {
   resetMocks();
+  invalidateContainerCache();
 });
 
 describe("isDockerInstalled", () => {

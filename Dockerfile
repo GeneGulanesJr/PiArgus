@@ -27,7 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g puppeteer-core
 
-RUN curl -LO https://github.com/h4ckf0r0day/obscura/releases/latest/download/obscura-x86_64-linux.tar.gz \
+ARG OBSCURA_VERSION=latest
+RUN curl -LO https://github.com/h4ckf0r0day/obscura/releases/${OBSCURA_VERSION}/download/obscura-x86_64-linux.tar.gz \
     && tar xzf obscura-x86_64-linux.tar.gz -C /usr/local/bin/ \
     && rm obscura-x86_64-linux.tar.gz \
     && chmod +x /usr/local/bin/obscura
@@ -38,5 +39,8 @@ COPY docker/searxng-settings.yml /etc/searxng/settings.yml
 COPY docker/supervisord.conf /etc/supervisor/conf.d/piargus.conf
 
 EXPOSE 9222 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost:8080/healthz || exit 1
 
 CMD ["supervisord", "-c", "/etc/supervisor/conf.d/piargus.conf"]

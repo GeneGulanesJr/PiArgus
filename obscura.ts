@@ -2,19 +2,18 @@
 
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
+import { ensureContainer, getContainerName, isDockerInstalled } from "./docker";
 
 const execFileAsync = promisify(execFileCb);
-
-const CONTAINER_NAME = "piargus";
-
-function getContainerName(): string {
-  return process.env.PIARGUS_CONTAINER_NAME || CONTAINER_NAME;
-}
 
 export async function execAsync(
   args: string[],
   timeoutMs = 30_000
 ): Promise<{ stdout: string; stderr: string }> {
+  const ensure = await ensureContainer();
+  if (!ensure.running) {
+    return { stdout: "", stderr: ensure.error || "Container not running" };
+  }
   const containerName = getContainerName();
   try {
     const { stdout, stderr } = await execFileAsync("docker", [
@@ -78,7 +77,7 @@ export async function evalJs(
 }
 
 export function isInstalled(): boolean {
-  return true;
+  return isDockerInstalled();
 }
 
 export function OBSCURA_PATH(): string {

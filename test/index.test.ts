@@ -15,7 +15,6 @@ vi.mock("../docker", () => ({
   isDockerInstalled: () => true,
   ensureContainer: vi.fn().mockResolvedValue({ running: true }),
   stopContainer: vi.fn().mockResolvedValue({ stopped: true }),
-  stopSearchVm: vi.fn().mockResolvedValue({ stopped: true }),
   screenshot: vi.fn().mockResolvedValue({ path: "/tmp/shot.png" }),
   interact: vi.fn().mockResolvedValue({ success: true, html: "<html>ok</html>" }),
   getContainerStatus: vi.fn().mockResolvedValue("running"),

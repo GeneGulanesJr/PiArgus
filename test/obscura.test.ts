@@ -2,6 +2,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { execAsync, OBSCURA_PATH, fetchText, fetchHtml, fetchLinks, evalJs, isInstalled } from "../obscura";
 
+vi.mock("../docker", () => ({
+  ensureContainer: vi.fn().mockResolvedValue({ running: true }),
+  getContainerName: () => "piargus",
+  isDockerInstalled: () => true,
+}));
+
 vi.mock("node:child_process", () => ({
   execFile: (cmd: string, args: string[], opts: any, cb: Function) => {
     if (args.includes("--version")) {
@@ -30,7 +36,7 @@ describe("OBSCURA_PATH", () => {
 });
 
 describe("isInstalled", () => {
-  it("returns true (always available via docker)", () => {
+  it("delegates to isDockerInstalled", () => {
     const result = isInstalled();
     expect(result).toBe(true);
   });

@@ -2,6 +2,7 @@
 
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
+import { ensureContainer, getContainerName } from "./docker";
 
 const execFileAsync = promisify(execFileCb);
 
@@ -613,7 +614,12 @@ export async function searchWeb(
   params.set("kl", resolveDDGLocale(options.language));
 
   const ddgUrl = `https://html.duckduckgo.com/html/?${params.toString()}`;
-  const containerName = process.env.PIARGUS_CONTAINER_NAME || "piargus";
+
+  const ensure = await ensureContainer();
+  if (!ensure.running) {
+    throw new Error(`Container not running: ${ensure.error}`);
+  }
+  const containerName = getContainerName();
 
   let html: string;
   try {

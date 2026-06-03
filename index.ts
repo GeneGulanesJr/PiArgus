@@ -23,7 +23,6 @@ import {
   screenshot as dockerScreenshot,
   interact,
   getContainerStatus,
-  stopSearchVm,
   getSearchVmStatus,
   SEARXNG_LOCAL_URL,
   ensureSearchVm,
@@ -54,7 +53,7 @@ export default async function (pi: ExtensionAPI) {
   }) as typeof pi.registerTool;
 
   pi.on("session_shutdown", async () => {
-    try { await stopSearchVm(); } catch { /* best-effort */ }
+    try { await stopContainer(); } catch { /* best-effort */ }
   });
 
   registerWebSearch(pi);

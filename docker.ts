@@ -31,7 +31,7 @@ export interface InteractionResult {
   error?: string;
 }
 
-function getContainerName(): string {
+export function getContainerName(): string {
   return process.env.PIARGUS_CONTAINER_NAME || CONTAINER_NAME;
 }
 
@@ -116,6 +116,25 @@ async function _ensureContainerImpl(): Promise<{ running: boolean; error?: strin
       return { running: false, error: "Container not ready after start" };
     }
     return { running: true };
+  }
+
+  if (inspect.exitCode === 0 && inspect.stdout.trim() === "paused") {
+    const unpauseResult = await dockerExec(["unpause", name], 15_000);
+    if (unpauseResult.exitCode !== 0) {
+      return { running: false, error: `Failed to unpause container: ${unpauseResult.stderr}` };
+    }
+    const ready = await waitForContainerReady();
+    if (!ready) {
+      return { running: false, error: "Container not ready after unpause" };
+    }
+    return { running: true };
+  }
+
+  if (inspect.exitCode === 0) {
+    const status = inspect.stdout.trim();
+    if (status === "created" || status === "dead" || status === "restarting") {
+      await dockerExec(["rm", "-f", name], 10_000);
+    }
   }
 
   const runResult = await dockerExec([

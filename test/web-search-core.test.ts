@@ -5,6 +5,11 @@ import { searchSearXNG, formatResults, formatResultsCompact, extractDomain, rese
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+vi.mock("../docker", () => ({
+  ensureContainer: vi.fn().mockResolvedValue({ running: true }),
+  getContainerName: () => "piargus",
+}));
+
 vi.mock("node:child_process", () => ({
   execFile: (_cmd: string, args: string[], _opts: any, cb: Function) => {
     if (args.includes("obscura") && args.includes("--dump")) {

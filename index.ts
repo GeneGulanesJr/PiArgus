@@ -7,7 +7,6 @@ import { Type } from "@sinclair/typebox";
 import { readFile } from "node:fs/promises";
 
 import {
-  OBSCURA_PATH,
   isInstalled as isObscuraInstalled,
   fetchText,
   fetchHtml,

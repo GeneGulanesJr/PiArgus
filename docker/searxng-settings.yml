@@ -7,6 +7,7 @@ search:
 server:
   limiter: false
   image_proxy: false
+  # local-dev default — override for production via SEARXNG_SECRET env var or bind-mounted config
   secret_key: piargus-search-2026
 valkey:
   url: false

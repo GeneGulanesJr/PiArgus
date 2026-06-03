@@ -35,12 +35,33 @@ const MOCK_RESPONSE = {
   unresponsive_engines: [] as string[],
 };
 
+const DDG_HTML_RESPONSE = `
+<html><body>
+<div class="result__body">
+  <a class="result__a" href="https://example.com/1">FastAPI Dependency Injection</a>
+  <a class="result__snippet">FastAPI has a powerful dependency injection system</a>
+</div>
+</div>
+<div class="result__body">
+  <a class="result__a" href="https://example.com/2">Dependency Injection Guide</a>
+  <a class="result__snippet">Learn about dependency injection patterns</a>
+</div>
+</div>
+<div class="result__body">
+  <a class="result__a" href="https://example.com/3">Test Query Result</a>
+  <a class="result__snippet">A test result snippet</a>
+</div>
+</div>
+</body></html>
+`;
+
 beforeEach(() => {
   mockFetch.mockReset();
   mockFetch.mockResolvedValue({
     ok: true,
     status: 200,
     json: () => Promise.resolve(MOCK_RESPONSE),
+    text: () => Promise.resolve(DDG_HTML_RESPONSE),
   });
 });
 

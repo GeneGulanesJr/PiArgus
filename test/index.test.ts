@@ -39,11 +39,14 @@ vi.mock("node:fs/promises", () => ({
 }));
 
 const registeredTools: Array<{ name: string; label: string; parameters: any }> = [];
+const registerToolSpy = vi.fn((tool: any) => {
+  registeredTools.push({ name: tool.name, label: tool.label, parameters: tool.parameters });
+});
 const mockPi = {
   on: vi.fn(),
-  registerTool: vi.fn((tool: any) => {
-    registeredTools.push({ name: tool.name, label: tool.label, parameters: tool.parameters });
-  }),
+  registerTool: registerToolSpy,
+  getActiveTools: vi.fn().mockReturnValue([]),
+  setActiveTools: vi.fn(),
 };
 
 describe("PiArgus extension registration", () => {
@@ -61,7 +64,8 @@ describe("PiArgus extension registration", () => {
 
   it("registers 6 browser tools plus delegates web_search and web_research", () => {
     // 6 browser tools + 2 pidocs tools registered directly in index.ts
-    expect(mockPi.registerTool).toHaveBeenCalledTimes(8);
+    // registerTool is wrapped for name tracking, but the original spy is still called
+    expect(registerToolSpy).toHaveBeenCalledTimes(8);
     // web_search and web_research are registered via registerWebSearch/registerWebResearch
     expect(mockRegisterWebSearch).toHaveBeenCalledWith(mockPi);
     expect(mockRegisterWebResearch).toHaveBeenCalledWith(mockPi);

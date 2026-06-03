@@ -425,7 +425,7 @@ export async function stopContainer(): Promise<{ stopped: boolean; error?: strin
 }
 
 export async function stopSearchVm(): Promise<{ stopped: boolean; error?: string }> {
-  return { stopped: true };
+  return stopContainer();
 }
 
 export async function getSearchVmStatus(): Promise<ContainerState> {

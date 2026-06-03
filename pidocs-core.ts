@@ -82,9 +82,30 @@ export async function resolveLookup(
   const resolverResult = runResolvers(name, { typeHint: options?.typeHint, config });
 
   if (resolverResult) {
+    let description: string | undefined;
+
+    // Fetch description from the resolved page
+    const fetchUrl = resolverResult.installUrl || resolverResult.urls[0];
+    if (fetchUrl) {
+      try {
+        const { stdout, stderr } = await fetchText(fetchUrl, { timeout: 10_000 });
+        if (stdout && !stderr) {
+          const firstParagraph = stdout
+            .slice(0, 500)
+            .split("\n")
+            .filter((l) => l.trim().length > 20)[0];
+          if (firstParagraph) {
+            description = firstParagraph.trim().slice(0, 200);
+          }
+        }
+      } catch {
+        // Best-effort — description is optional
+      }
+    }
+
     return {
       urls: resolverResult.urls,
-      description: undefined, // Built-in resolvers don't fetch pages
+      description,
       resolver: resolverResult.resolver,
       name,
       type: options?.typeHint || resolverResult.resolver,
@@ -92,9 +113,9 @@ export async function resolveLookup(
   }
 
   // Step 2: SearXNG fallback
-  const { url: _searxngUrl, error: vmError } = await ensureSearXNG();
+  const { url: searxngUrl, error: vmError } = await ensureSearXNG();
 
-  if (vmError || !_searxngUrl) {
+  if (vmError || !searxngUrl) {
     return {
       urls: [],
       description: `No built-in resolver matched "${name}" and SearXNG is unavailable: ${vmError}`,
@@ -108,6 +129,7 @@ export async function resolveLookup(
     const searchResult = await searchSearXNG(`install ${name}`, {
       categories: "it",
       maxResults: 5,
+      baseUrl: searxngUrl,
     });
 
     const urls = searchResult.results.map((r) => r.url);
@@ -158,9 +180,9 @@ export async function resolveInstall(
     resolver = resolverResult.resolver;
   } else {
     // SearXNG fallback to find a source URL
-    const { url: _searxngUrl, error: vmError } = await ensureSearXNG();
+    const { url: searxngUrl, error: vmError } = await ensureSearXNG();
 
-    if (vmError || !_searxngUrl) {
+    if (vmError || !searxngUrl) {
       return {
         installCommands: [],
         sourceUrl: "",
@@ -175,6 +197,7 @@ export async function resolveInstall(
       const searchResult = await searchSearXNG(`how to install ${name}`, {
         categories: "it",
         maxResults: 3,
+        baseUrl: searxngUrl,
       });
 
       if (searchResult.results.length === 0) {

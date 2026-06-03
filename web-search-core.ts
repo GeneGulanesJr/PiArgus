@@ -43,6 +43,23 @@ export const DEFAULT_MAX_RESULTS = 10;
 const SEARCH_TIMEOUT_MS = 30_000;
 
 
+const LANGUAGE_TO_REGION: Record<string, string> = {
+  "en": "us-en", "de": "de-de", "fr": "fr-fr", "es": "es-es",
+  "it": "it-it", "pt": "br-pt", "nl": "nl-nl", "pl": "pl-pl",
+  "ru": "ru-ru", "ja": "jp-jp", "ko": "kr-kr", "zh": "cn-zh",
+  "ar": "xa-ar", "hi": "in-hi", "tr": "tr-tr", "sv": "se-sv",
+  "da": "dk-da", "fi": "fi-fi", "nb": "no-nb", "cs": "cz-cs",
+  "el": "gr-el", "he": "il-he", "th": "th-th", "vi": "vn-vi",
+  "uk": "ua-uk", "ro": "ro-ro", "hu": "hu-hu", "id": "id-id",
+  "ms": "my-ms", "bg": "bg-bg", "hr": "hr-hr", "sk": "sk-sk",
+  "sl": "si-sl", "lt": "lt-lt", "lv": "lv-lv", "et": "ee-et",
+};
+
+function resolveDDGLocale(language?: string): string {
+  if (!language || language === "auto") return "us-en";
+  return LANGUAGE_TO_REGION[language] || `${language}-${language}`;
+}
+
 function compactWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -56,10 +73,11 @@ export async function searchSearXNG(
     timeRange?: string;
     maxResults?: number;
     pageno?: number;
+    baseUrl?: string;
   }
 ): Promise<SearchResponse> {
   const maxResults = options.maxResults ?? DEFAULT_MAX_RESULTS;
-  const baseUrl = getSearXNGUrl();
+  const baseUrl = options.baseUrl || getSearXNGUrl();
 
   const params = new URLSearchParams();
   params.set("q", query);
@@ -231,10 +249,11 @@ async function searchSearXNGHtml(
     timeRange?: string;
     maxResults?: number;
     pageno?: number;
+    baseUrl?: string;
   },
   maxResults: number
 ): Promise<SearchResponse> {
-  const baseUrl = getSearXNGUrl();
+  const baseUrl = options.baseUrl || getSearXNGUrl();
 
   const params = new URLSearchParams();
   params.set("q", query);
@@ -588,7 +607,7 @@ export async function searchWeb(
   const maxResults = options.maxResults ?? DEFAULT_MAX_RESULTS;
   const params = new URLSearchParams();
   params.set("q", query);
-  params.set("kl", options.language && options.language !== "auto" ? `${options.language}-${options.language}` : "us-en");
+  params.set("kl", resolveDDGLocale(options.language));
 
   const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
   const response = await fetch(url, {
@@ -601,10 +620,6 @@ export async function searchWeb(
 
   if (!response.ok) {
     throw new Error(`DuckDuckGo returned HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  if (typeof (response as any).text !== "function") {
-    return searchSearXNG(query, options);
   }
 
   const html = await response.text();

@@ -1,6 +1,7 @@
 // obscura.ts — Obscura CLI wrapper for light-tier browser operations
 
 import { execFile as execFileCb } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 
@@ -91,9 +92,14 @@ export async function evalJs(
 
 /** Check if obscura is installed */
 export function isInstalled(): boolean {
-  try {
-    return existsSync(OBSCURA_PATH());
-  } catch {
-    return false;
+  const path = OBSCURA_PATH();
+  if (path === "obscura") {
+    try {
+      execFileSync("which", ["obscura"], { stdio: "pipe", timeout: 2000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
+  return existsSync(path);
 }

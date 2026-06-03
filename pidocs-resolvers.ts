@@ -265,6 +265,8 @@ interface ResolverEntry {
   fn: ResolverFn;
 }
 
+const GENERIC_RESOLVERS = new Set(["npm", "pip", "cargo", "brew", "docker", "aur", "snap"]);
+
 const RESOLVERS: ResolverEntry[] = [
   { key: "npm", fn: resolveNpm },
   { key: "github", fn: resolveGithub },
@@ -310,8 +312,16 @@ export function runResolvers(
     }
   }
 
-  // Try all resolvers in priority order
+  // If no type hint and detectType returned null, the name is ambiguous.
+  // Skip generic resolvers (npm, pip, cargo, brew, docker, aur, snap) that
+  // accept any single word — they would all match and picking the first one
+  // (npm) is almost certainly wrong for non-npm packages. Instead, only try
+  // pattern-specific resolvers, then fall through to SearXNG.
+  const nameIsAmbiguous = !options?.typeHint && detectedType === null;
+
+  // Try resolvers in priority order
   for (const entry of RESOLVERS) {
+    if (nameIsAmbiguous && GENERIC_RESOLVERS.has(entry.key)) continue;
     const resolverConfig = config.resolvers[entry.key as keyof typeof config.resolvers];
     if (isResolverDisabled(resolverConfig)) continue;
     const result = entry.fn(name);

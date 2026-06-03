@@ -56,6 +56,14 @@ function truncate(content: string): string {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default async function (pi: ExtensionAPI) {
+  // Track all tool names registered by this extension so the session_start
+  // handler can activate them without a hardcoded list.
+  const registeredToolNames: string[] = [];
+  const origRegisterTool = pi.registerTool.bind(pi);
+  pi.registerTool = ((def: any) => {
+    registeredToolNames.push(def.name);
+    return origRegisterTool(def);
+  }) as typeof pi.registerTool;
 
   // Auto-stop search VM on session shutdown (it has a persistent exec session
   // tied to this process). The browser VM is NOT stopped so other pi sessions
@@ -82,17 +90,12 @@ export default async function (pi: ExtensionAPI) {
   // factory can race with pi's initial _refreshToolRegistry(). This hook
   // force-activates PiArgus tools on session_start so they appear in the
   // "Available tools" section and the LLM can call them automatically.
+  // Tool names are tracked dynamically so new tools are included automatically.
   // ═══════════════════════════════════════════════════════════════════════════
 
   pi.on("session_start", () => {
     const active = pi.getActiveTools();
-    const piargusTools = [
-      "web_search", "web_research",
-      "pidocs_lookup", "pidocs_install",
-      "browser_navigate", "browser_fetch", "browser_screenshot",
-      "browser_action", "browser_scrape", "browser_vm_status",
-    ];
-    const missing = piargusTools.filter((n) => !active.includes(n));
+    const missing = registeredToolNames.filter((n) => !active.includes(n));
     if (missing.length > 0) {
       pi.setActiveTools([...active, ...missing]);
     }

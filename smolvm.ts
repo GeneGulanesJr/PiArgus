@@ -2,7 +2,7 @@
 // Uses puppeteer-core inside the VM for CDP-driven browser automation
 // Uses Granian (via persistent exec session) for SearXNG search
 
-import { execFile as execFileCb, spawn, type ChildProcess } from "node:child_process";
+import { execFile as execFileCb, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
 import { writeFile, mkdir } from "node:fs/promises";
@@ -68,11 +68,16 @@ export function SMOLVM_PATH(): string {
 
 /** Check if smolvm is installed */
 export function isSmolvmInstalled(): boolean {
-  try {
-    return existsSync(SMOLVM_PATH());
-  } catch {
-    return false;
+  const path = SMOLVM_PATH();
+  if (path === "smolvm") {
+    try {
+      execFileSync("which", ["smolvm"], { stdio: "pipe", timeout: 2000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
+  return existsSync(path);
 }
 
 // ─── CLI execution ─────────────────────────────────────────────────────────

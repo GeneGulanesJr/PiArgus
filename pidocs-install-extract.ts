@@ -9,26 +9,26 @@ export interface InstallCommand {
 
 // ─── Manager detection patterns ────────────────────────────────────────────────
 
-const MANAGER_PATTERNS: Array<{ pattern: RegExp; manager: string }> = [
-  { pattern: /\bnpm\s+install\b/, manager: "npm" },
-  { pattern: /\byarn\s+add\b/, manager: "npm" },
-  { pattern: /\bpnpm\s+add\b/, manager: "npm" },
-  { pattern: /\bpip\s+install\b/, manager: "pip" },
-  { pattern: /\bpip3\s+install\b/, manager: "pip" },
-  { pattern: /\bpython\s+-m\s+pip\s+install\b/, manager: "pip" },
-  { pattern: /\bbrew\s+install\s+--cask\b/, manager: "brew" },
-  { pattern: /\bbrew\s+install\b/, manager: "brew" },
-  { pattern: /\bsudo\s+apt(-get)?\s+install\b/, manager: "apt" },
-  { pattern: /\bapt(-get)?\s+install\b/, manager: "apt" },
-  { pattern: /\bcargo\s+add\b/, manager: "cargo" },
-  { pattern: /\bdocker\s+pull\b/, manager: "docker" },
-  { pattern: /\bgo\s+install\b/, manager: "go" },
-  { pattern: /\bgo\s+get\b/, manager: "go" },
-  { pattern: /\bsnap\s+install\b/, manager: "snap" },
-  { pattern: /\bflatpak\s+install\b/, manager: "flatpak" },
-  { pattern: /\bpacman\s+-S\b/, manager: "pacman" },
-  { pattern: /\bdnf\s+install\b/, manager: "dnf" },
-  { pattern: /\bchoco\s+install\b/, manager: "choco" },
+const MANAGER_PATTERNS: Array<{ source: string; manager: string }> = [
+  { source: "\\bnpm\\s+install\\b", manager: "npm" },
+  { source: "\\byarn\\s+add\\b", manager: "npm" },
+  { source: "\\bpnpm\\s+add\\b", manager: "npm" },
+  { source: "\\bpip\\s+install\\b", manager: "pip" },
+  { source: "\\bpip3\\s+install\\b", manager: "pip" },
+  { source: "\\bpython\\s+-m\\s+pip\\s+install\\b", manager: "pip" },
+  { source: "\\bbrew\\s+install\\s+--cask\\b", manager: "brew" },
+  { source: "\\bbrew\\s+install\\b", manager: "brew" },
+  { source: "\\bsudo\\s+apt(-get)?\\s+install\\b", manager: "apt" },
+  { source: "\\bapt(-get)?\\s+install\\b", manager: "apt" },
+  { source: "\\bcargo\\s+add\\b", manager: "cargo" },
+  { source: "\\bdocker\\s+pull\\b", manager: "docker" },
+  { source: "\\bgo\\s+install\\b", manager: "go" },
+  { source: "\\bgo\\s+get\\b", manager: "go" },
+  { source: "\\bsnap\\s+install\\b", manager: "snap" },
+  { source: "\\bflatpak\\s+install\\b", manager: "flatpak" },
+  { source: "\\bpacman\\s+-S\\b", manager: "pacman" },
+  { source: "\\bdnf\\s+install\\b", manager: "dnf" },
+  { source: "\\bchoco\\s+install\\b", manager: "choco" },
 ];
 
 // ─── Platform mapping ─────────────────────────────────────────────────────────
@@ -50,47 +50,45 @@ const MANAGER_PLATFORM: Record<string, string> = {
 
 // ─── Install command regex patterns ────────────────────────────────────────────
 
-const INSTALL_COMMAND_PATTERNS: RegExp[] = [
-  // Package manager commands
-  /npm\s+install\s+[\w@/.-]+/g,
-  /yarn\s+add\s+[\w@/.-]+/g,
-  /pnpm\s+add\s+[\w@/.-]+/g,
-  /pip3?\s+install\s+[\w.-]+/g,
-  /python\s+-m\s+pip\s+install\s+[\w.-]+/g,
-  /brew\s+install\s+(?:--cask\s+)?[\w.-]+/g,
-  /sudo\s+apt(-get)?\s+install\s+[\w.-]+/g,
-  /apt(-get)?\s+install\s+[\w.-]+/g,
-  /cargo\s+add\s+[\w.-]+/g,
-  /docker\s+pull\s+[\w/.-]+/g,
-  /go\s+(?:get|install)\s+[\w./@-]+/g,
-  /snap\s+install\s+[\w.-]+/g,
-  /flatpak\s+install\s+[\w.-]+/g,
-  /pacman\s+-S\s+[\w.-]+/g,
-  /dnf\s+install\s+[\w.-]+/g,
-  /choco\s+install\s+[\w.-]+/g,
-  // Generic shell commands
-  /curl\s+\S+.*\|\s*(?:sudo\s+)?sh/g,
-  /make\s+install/g,
+const INSTALL_COMMAND_PATTERN_SOURCES: string[] = [
+  "npm\\s+install\\s+[\\w@/.-]+",
+  "yarn\\s+add\\s+[\\w@/.-]+",
+  "pnpm\\s+add\\s+[\\w@/.-]+",
+  "pip3?\\s+install\\s+[\\w.-]+",
+  "python\\s+-m\\s+pip\\s+install\\s+[\\w.-]+",
+  "brew\\s+install\\s+(?:--cask\\s+)?[\\w.-]+",
+  "sudo\\s+apt(-get)?\\s+install\\s+[\\w.-]+",
+  "apt(-get)?\\s+install\\s+[\\w.-]+",
+  "cargo\\s+add\\s+[\\w.-]+",
+  "docker\\s+pull\\s+[\\w/.-]+",
+  "go\\s+(?:get|install)\\s+[\\w./@-]+",
+  "snap\\s+install\\s+[\\w.-]+",
+  "flatpak\\s+install\\s+[\\w.-]+",
+  "pacman\\s+-S\\s+[\\w.-]+",
+  "dnf\\s+install\\s+[\\w.-]+",
+  "choco\\s+install\\s+[\\w.-]+",
+  "curl\\s+\\S+.*\\|\\s*(?:sudo\\s+)?sh",
+  "make\\s+install",
 ];
 
 // ─── Prerequisite patterns ────────────────────────────────────────────────────
 
-const PREREQ_PATTERNS: RegExp[] = [
-  /requires?\s+([\w.]+\s[\d.]+[^.]*?)(?:\.|,|;|$)/gi,
-  /prerequisites?:?\s+([^.\n]+)/gi,
-  /needs?\s+([\w.]+\s[\d.]+[^.]*?)(?:\.|,|;|$)/gi,
-  /Node\.?js\s+(\d+|latest|LTS)/gi,
-  /Python\s+(\d+|[\d.]+)/gi,
-  /Rust\s+([\d.]+|stable|nightly)/gi,
-  /Go\s+(\d+|[\d.]+)/gi,
+const PREREQ_PATTERN_SOURCES: string[] = [
+  "requires?\\s+([\\w.]+\\s[\\d.]+[^.]*?)(?:\\.|,|;|$)",
+  "prerequisites?:?\\s+([^.\\n]+)",
+  "needs?\\s+([\\w.]+\\s[\\d.]+[^.]*?)(?:\\.|,|;|$)",
+  "Node\\.?js\\s+(\\d+|latest|LTS)",
+  "Python\\s+(\\d+|[\\d.]+)",
+  "Rust\\s+([\\d.]+|stable|nightly)",
+  "Go\\s+(\\d+|[\\d.]+)",
 ];
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
 /** Determine the package manager from a line of text */
 export function extractManager(line: string): string | null {
-  for (const { pattern, manager } of MANAGER_PATTERNS) {
-    if (pattern.test(line)) return manager;
+  for (const { source, manager } of MANAGER_PATTERNS) {
+    if (new RegExp(source).test(line)) return manager;
   }
   return null;
 }
@@ -105,11 +103,11 @@ export function extractInstallCommands(name: string, pageText: string): InstallC
   const commands: InstallCommand[] = [];
   const seen = new Set<string>();
 
-  // Collect prerequisites
+  const prereqPatterns = PREREQ_PATTERN_SOURCES.map(s => new RegExp(s, "gi"));
+
   const notes: string[] = [];
-  for (const pattern of PREREQ_PATTERNS) {
+  for (const pattern of prereqPatterns) {
     let match: RegExpExecArray | null;
-    pattern.lastIndex = 0;
     while ((match = pattern.exec(pageText)) !== null) {
       const note = match[0].trim();
       if (note && note.length < 200 && !notes.some((n) => n.includes(note))) {
@@ -118,9 +116,9 @@ export function extractInstallCommands(name: string, pageText: string): InstallC
     }
   }
 
-  // Extract install commands
-  for (const pattern of INSTALL_COMMAND_PATTERNS) {
-    pattern.lastIndex = 0;
+  const installPatterns = INSTALL_COMMAND_PATTERN_SOURCES.map(s => new RegExp(s, "g"));
+
+  for (const pattern of installPatterns) {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(pageText)) !== null) {
       const command = match[0].trim();

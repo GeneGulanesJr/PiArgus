@@ -1,5 +1,10 @@
 // web-search-core.ts — SearXNG search with JSON API primary + HTML fallback
 
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFileCb);
+
 export interface SearchResult {
   title: string;
   url: string;
@@ -34,8 +39,6 @@ interface SearXNGJsonResponse {
 }
 
 function getSearXNGUrl(): string {
-  // If SEARXNG_URL is explicitly set, respect it (allows pointing to any SearXNG instance)
-  // Otherwise default to the local smolvm search VM on port 8888
   return process.env.SEARXNG_URL || "http://localhost:8888";
 }
 
@@ -592,7 +595,7 @@ function scoreParagraph(text: string, keywordRegexes: RegExp[]): number {
 
 /**
  * DuckDuckGo-backed web search used by web_search/web_research.
- * This intentionally avoids the local SearXNG/smolvm dependency.
+ * Routes through the Obscura binary inside the Docker container.
  */
 export async function searchWeb(
   query: string,
@@ -609,20 +612,23 @@ export async function searchWeb(
   params.set("q", query);
   params.set("kl", resolveDDGLocale(options.language));
 
-  const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-    signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
-  });
+  const ddgUrl = `https://html.duckduckgo.com/html/?${params.toString()}`;
+  const containerName = process.env.PIARGUS_CONTAINER_NAME || "piargus";
 
-  if (!response.ok) {
-    throw new Error(`DuckDuckGo returned HTTP ${response.status}: ${response.statusText}`);
+  let html: string;
+  try {
+    const { stdout } = await execFileAsync("docker", [
+      "exec", containerName,
+      "obscura", "fetch", ddgUrl, "--dump", "html", "--quiet",
+    ], {
+      timeout: SEARCH_TIMEOUT_MS,
+      maxBuffer: 50 * 1024 * 1024,
+    });
+    html = stdout;
+  } catch (err: any) {
+    throw new Error(`DuckDuckGo fetch via container failed: ${err.message || err}`);
   }
 
-  const html = await response.text();
   const results: SearchResult[] = [];
   const blockRegex = /<div[^>]*class="result__body"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
   const linkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;

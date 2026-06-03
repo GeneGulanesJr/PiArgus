@@ -1,0 +1,12 @@
+use_default_settings: true
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
+server:
+  limiter: false
+  image_proxy: false
+  secret_key: piargus-search-2026
+valkey:
+  url: false

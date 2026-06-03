@@ -2,9 +2,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { searchSearXNG, formatResults, formatResultsCompact, extractDomain, researchQuery, DEFAULT_MAX_RESULTS } from "../web-search-core";
 
-// Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
+
+vi.mock("node:child_process", () => ({
+  execFile: (_cmd: string, args: string[], _opts: any, cb: Function) => {
+    if (args.includes("obscura") && args.includes("--dump")) {
+      cb(null, { stdout: DDG_HTML_RESPONSE, stderr: "" });
+    } else {
+      cb(null, { stdout: "", stderr: "" });
+    }
+  },
+}));
 
 const MOCK_RESPONSE = {
   query: "test query",

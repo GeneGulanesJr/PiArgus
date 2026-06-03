@@ -17,9 +17,9 @@ vi.mock("../obscura", () => ({
   fetchText: vi.fn(),
 }));
 
-vi.mock("../smolvm", () => ({
+vi.mock("../docker", () => ({
   ensureSearchVm: vi.fn().mockResolvedValue({ running: true, url: "http://localhost:8888" }),
-  isSmolvmInstalled: vi.fn().mockReturnValue(true),
+  isDockerInstalled: vi.fn().mockReturnValue(true),
   SEARXNG_LOCAL_URL: "http://localhost:8888",
 }));
 

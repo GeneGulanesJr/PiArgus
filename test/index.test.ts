@@ -1,9 +1,8 @@
 // test/index.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock all external dependencies before importing index.ts
 vi.mock("../obscura", () => ({
-  OBSCURA_PATH: () => "/usr/local/bin/obscura",
+  OBSCURA_PATH: () => "docker exec piargus obscura",
   isInstalled: () => true,
   fetchText: vi.fn().mockResolvedValue({ stdout: "text", stderr: "" }),
   fetchHtml: vi.fn().mockResolvedValue({ stdout: "<html>", stderr: "" }),
@@ -12,13 +11,17 @@ vi.mock("../obscura", () => ({
   execAsync: vi.fn().mockResolvedValue({ stdout: "ok", stderr: "" }),
 }));
 
-vi.mock("../smolvm", () => ({
-  isSmolvmInstalled: () => true,
-  ensureVm: vi.fn().mockResolvedValue({ running: true }),
-  stopVm: vi.fn().mockResolvedValue({ stopped: true }),
+vi.mock("../docker", () => ({
+  isDockerInstalled: () => true,
+  ensureContainer: vi.fn().mockResolvedValue({ running: true }),
+  stopContainer: vi.fn().mockResolvedValue({ stopped: true }),
+  stopSearchVm: vi.fn().mockResolvedValue({ stopped: true }),
   screenshot: vi.fn().mockResolvedValue({ path: "/tmp/shot.png" }),
   interact: vi.fn().mockResolvedValue({ success: true, html: "<html>ok</html>" }),
-  getVmStatus: vi.fn().mockResolvedValue("running"),
+  getContainerStatus: vi.fn().mockResolvedValue("running"),
+  getSearchVmStatus: vi.fn().mockResolvedValue("running"),
+  ensureSearchVm: vi.fn().mockResolvedValue({ running: true, url: "http://localhost:8888" }),
+  SEARXNG_LOCAL_URL: "http://localhost:8888",
 }));
 
 vi.mock("../tier-router", () => ({
@@ -33,7 +36,6 @@ vi.mock("../web-search", () => ({
   registerWebResearch: (...args: any[]) => mockRegisterWebResearch(...args),
 }));
 
-// Mock node:fs/promises for readFile (screenshot)
 vi.mock("node:fs/promises", () => ({
   readFile: vi.fn().mockResolvedValue(Buffer.from("fake-png")),
 }));
@@ -53,7 +55,6 @@ describe("PiArgus extension registration", () => {
   beforeEach(async () => {
     registeredTools.length = 0;
     vi.clearAllMocks();
-    // Re-import for fresh registration each test
     const mod = await import("../index");
     await mod.default(mockPi as any);
   });
@@ -63,10 +64,7 @@ describe("PiArgus extension registration", () => {
   });
 
   it("registers 6 browser tools plus delegates web_search and web_research", () => {
-    // 6 browser tools + 2 pidocs tools registered directly in index.ts
-    // registerTool is wrapped for name tracking, but the original spy is still called
     expect(registerToolSpy).toHaveBeenCalledTimes(8);
-    // web_search and web_research are registered via registerWebSearch/registerWebResearch
     expect(mockRegisterWebSearch).toHaveBeenCalledWith(mockPi);
     expect(mockRegisterWebResearch).toHaveBeenCalledWith(mockPi);
   });
@@ -104,13 +102,13 @@ describe("PiArgus extension registration", () => {
     expect(names).toContain("browser_scrape");
   });
 
-  it("registers browser_vm_status tool (renamed from browser_obscura_serve)", () => {
+  it("registers browser_vm_status tool", () => {
     const names = registeredTools.map((t) => t.name);
     expect(names).toContain("browser_vm_status");
     expect(names).not.toContain("browser_obscura_serve");
   });
 
-  it("does not register web_search or web_research tools directly (registered via registerWebSearch/registerWebResearch)", () => {
+  it("does not register web_search or web_research tools directly", () => {
     const names = registeredTools.map((t) => t.name);
     expect(names).not.toContain("web_search");
     expect(names).not.toContain("web_research");
@@ -119,7 +117,6 @@ describe("PiArgus extension registration", () => {
   it("browser_fetch has a mode parameter with union type", () => {
     const fetchTool = registeredTools.find((t) => t.name === "browser_fetch");
     expect(fetchTool).toBeTruthy();
-    // TypeBox Union types have an "anyOf" property
     const modeParam = fetchTool!.parameters.properties?.mode;
     expect(modeParam).toBeTruthy();
     expect(modeParam?.anyOf).toBeTruthy();

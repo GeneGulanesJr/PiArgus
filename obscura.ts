@@ -1,34 +1,25 @@
-// obscura.ts — Obscura CLI wrapper for light-tier browser operations
+// obscura.ts — Obscura CLI wrapper via Docker container for light-tier browser operations
 
 import { execFile as execFileCb } from "node:child_process";
-import { execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync } from "node:fs";
 
 const execFileAsync = promisify(execFileCb);
 
-/** Find the obscura binary */
-export function OBSCURA_PATH(): string {
-  const candidates = [
-    process.env.OBSCURA_PATH,
-    `${process.env.HOME}/.local/bin/obscura`,
-    "/usr/local/bin/obscura",
-  ].filter(Boolean) as string[];
+const CONTAINER_NAME = "piargus";
 
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return "obscura";
+function getContainerName(): string {
+  return process.env.PIARGUS_CONTAINER_NAME || CONTAINER_NAME;
 }
 
-/** Execute an obscura CLI command */
 export async function execAsync(
   args: string[],
   timeoutMs = 30_000
 ): Promise<{ stdout: string; stderr: string }> {
-  const bin = OBSCURA_PATH();
+  const containerName = getContainerName();
   try {
-    const { stdout, stderr } = await execFileAsync(bin, args, {
+    const { stdout, stderr } = await execFileAsync("docker", [
+      "exec", containerName, "obscura", ...args,
+    ], {
       timeout: timeoutMs,
       maxBuffer: 50 * 1024 * 1024,
     });
@@ -41,7 +32,6 @@ export async function execAsync(
   }
 }
 
-/** Fetch a page as text */
 export async function fetchText(
   url: string,
   opts?: { waitUntil?: string; stealth?: boolean; selector?: string; timeout?: number }
@@ -54,7 +44,6 @@ export async function fetchText(
   return execAsync(args, opts?.timeout ?? 30_000);
 }
 
-/** Fetch a page as HTML */
 export async function fetchHtml(
   url: string,
   opts?: { waitUntil?: string; stealth?: boolean; selector?: string; timeout?: number }
@@ -67,7 +56,6 @@ export async function fetchHtml(
   return execAsync(args, opts?.timeout ?? 30_000);
 }
 
-/** Extract all links from a page */
 export async function fetchLinks(
   url: string,
   opts?: { stealth?: boolean; timeout?: number }
@@ -78,7 +66,6 @@ export async function fetchLinks(
   return execAsync(args, opts?.timeout ?? 30_000);
 }
 
-/** Evaluate a JS expression on a page */
 export async function evalJs(
   url: string,
   expression: string,
@@ -90,16 +77,10 @@ export async function evalJs(
   return execAsync(args, opts?.timeout ?? 30_000);
 }
 
-/** Check if obscura is installed */
 export function isInstalled(): boolean {
-  const path = OBSCURA_PATH();
-  if (path === "obscura") {
-    try {
-      execFileSync("which", ["obscura"], { stdio: "pipe", timeout: 2000 });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return existsSync(path);
+  return true;
+}
+
+export function OBSCURA_PATH(): string {
+  return `docker exec ${getContainerName()} obscura`;
 }

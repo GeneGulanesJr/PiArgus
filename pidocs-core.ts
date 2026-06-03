@@ -9,7 +9,7 @@ import {
 import { extractInstallCommands, type InstallCommand } from "./pidocs-install-extract";
 import { searchSearXNG, type SearchResponse } from "./web-search-core";
 import { fetchText } from "./obscura";
-import { ensureSearchVm, isSmolvmInstalled, SEARXNG_LOCAL_URL } from "./smolvm";
+import { ensureSearchVm, isDockerInstalled, SEARXNG_LOCAL_URL } from "./docker";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -32,14 +32,14 @@ export function invalidateConfigCache(): void {
 async function ensureSearXNG(): Promise<{ url: string | null; error?: string }> {
   const config = getConfig();
   const configuredUrl = config.searxngUrl || process.env.SEARXNG_URL;
-  const useLocalSmolvm = !configuredUrl || configuredUrl === SEARXNG_LOCAL_URL;
+  const useLocalContainer = !configuredUrl || configuredUrl === SEARXNG_LOCAL_URL;
 
-  if (useLocalSmolvm && isSmolvmInstalled()) {
+  if (useLocalContainer && isDockerInstalled()) {
     const ensure = await ensureSearchVm();
     if (!ensure.running) {
       return {
         url: null,
-        error: `Failed to start SearXNG search VM: ${ensure.error}\nSet SEARXNG_URL or install smolvm.`,
+        error: `Failed to start SearXNG: ${ensure.error}\nSet SEARXNG_URL or install Docker.`,
       };
     }
     return { url: ensure.url || SEARXNG_LOCAL_URL };

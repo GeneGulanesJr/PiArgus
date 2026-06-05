@@ -1,10 +1,25 @@
 // test/web-search-core.test.ts
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { searchSearXNG, formatResults, formatResultsCompact, extractDomain, researchQuery, DEFAULT_MAX_RESULTS } from "../web-search-core";
+import { searchSearXNG, searchWeb, formatResults, formatResultsCompact, extractDomain, researchQuery, DEFAULT_MAX_RESULTS } from "../web-search-core";
 
-// Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
+
+vi.mock("../docker", () => ({
+  ensureContainer: vi.fn().mockResolvedValue({ running: true }),
+  getContainerName: () => "piargus",
+  invalidateContainerCache: vi.fn(),
+}));
+
+vi.mock("node:child_process", () => ({
+  execFile: (_cmd: string, args: string[], _opts: any, cb: Function) => {
+    if (args.includes("obscura") && args.includes("--dump")) {
+      cb(null, { stdout: DDG_HTML_RESPONSE, stderr: "" });
+    } else {
+      cb(null, { stdout: "", stderr: "" });
+    }
+  },
+}));
 
 const MOCK_RESPONSE = {
   query: "test query",
@@ -439,5 +454,31 @@ describe("researchQuery", () => {
     );
 
     expect(result.totalContentChars).toBeLessThanOrEqual(600); // Some margin for paragraphs
+  });
+});
+
+describe("searchWeb", () => {
+  it("uses container when available", async () => {
+    const result = await searchWeb("test query", {});
+
+    expect(result.results.length).toBeGreaterThan(0);
+    expect(result.query).toBe("test query");
+    expect(result.results[0].engines).toContain("duckduckgo");
+  });
+
+  it("falls back to direct HTTP when container is not running", async () => {
+    const { ensureContainer } = await import("../docker");
+    (ensureContainer as any).mockResolvedValueOnce({ running: false });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(DDG_HTML_RESPONSE),
+    });
+
+    const result = await searchWeb("test query", {});
+
+    expect(result.results.length).toBeGreaterThan(0);
+    expect(result.results[0].engines).toContain("duckduckgo");
   });
 });

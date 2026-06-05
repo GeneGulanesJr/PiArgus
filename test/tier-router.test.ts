@@ -61,7 +61,7 @@ describe("classifyTier", () => {
 describe("tierExplanation", () => {
   it("explains heavy tier for screenshots", () => {
     const explanation = tierExplanation("browser_screenshot", { url: "https://example.com" });
-    expect(explanation).toContain("smolvm");
+    expect(explanation).toContain("Docker");
     expect(explanation).toContain("Chromium");
   });
 

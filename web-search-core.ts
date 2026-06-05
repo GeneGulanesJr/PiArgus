@@ -1,5 +1,11 @@
 // web-search-core.ts — SearXNG search with JSON API primary + HTML fallback
 
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
+import { ensureContainer, getContainerName } from "./docker";
+
+const execFileAsync = promisify(execFileCb);
+
 export interface SearchResult {
   title: string;
   url: string;
@@ -34,8 +40,6 @@ interface SearXNGJsonResponse {
 }
 
 function getSearXNGUrl(): string {
-  // If SEARXNG_URL is explicitly set, respect it (allows pointing to any SearXNG instance)
-  // Otherwise default to the local smolvm search VM on port 8888
   return process.env.SEARXNG_URL || "http://localhost:8888";
 }
 
@@ -592,7 +596,8 @@ function scoreParagraph(text: string, keywordRegexes: RegExp[]): number {
 
 /**
  * DuckDuckGo-backed web search used by web_search/web_research.
- * This intentionally avoids the local SearXNG/smolvm dependency.
+ * Routes through the Obscura binary inside the Docker container when available,
+ * falls back to direct HTTP fetch when the container is not running.
  */
 export async function searchWeb(
   query: string,
@@ -609,8 +614,30 @@ export async function searchWeb(
   params.set("q", query);
   params.set("kl", resolveDDGLocale(options.language));
 
-  const url = `https://html.duckduckgo.com/html/?${params.toString()}`;
-  const response = await fetch(url, {
+  const ddgUrl = `https://html.duckduckgo.com/html/?${params.toString()}`;
+
+  const ensure = await ensureContainer();
+  if (ensure.running) {
+    try {
+      const containerName = getContainerName();
+      const { stdout } = await execFileAsync("docker", [
+        "exec", containerName,
+        "obscura", "fetch", ddgUrl, "--dump", "html", "--quiet",
+      ], {
+        timeout: SEARCH_TIMEOUT_MS,
+        maxBuffer: 50 * 1024 * 1024,
+      });
+      return parseDDGResults(stdout, maxResults, query);
+    } catch {
+      // Fall through to direct HTTP fetch
+    }
+  }
+
+  return searchWebDirect(ddgUrl, maxResults, query);
+}
+
+async function searchWebDirect(ddgUrl: string, maxResults: number, query: string): Promise<SearchResponse> {
+  const response = await fetch(ddgUrl, {
     headers: {
       "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
       "Accept-Language": "en-US,en;q=0.9",

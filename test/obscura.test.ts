@@ -2,11 +2,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { execAsync, OBSCURA_PATH, fetchText, fetchHtml, fetchLinks, evalJs, isInstalled } from "../obscura";
 
-// Mock execFile so we don't need obscura installed
+vi.mock("../docker", () => ({
+  ensureContainer: vi.fn().mockResolvedValue({ running: true }),
+  getContainerName: () => "piargus",
+  isDockerInstalled: () => true,
+  invalidateContainerCache: vi.fn(),
+}));
+
 vi.mock("node:child_process", () => ({
   execFile: (cmd: string, args: string[], opts: any, cb: Function) => {
-    // Handle the overloaded signature: execFile(cmd, args, opts, cb) or execFile(cmd, args, cb)
-    // Our promisified version always passes an opts object
     if (args.includes("--version")) {
       cb(null, { stdout: "obscura 1.0.0\n", stderr: "" });
     } else if (args.includes("--dump") && args.includes("text")) {
@@ -23,28 +27,24 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-// Mock existsSync to make OBSCURA_PATH find our mock
-vi.mock("node:fs", () => ({
-  existsSync: (p: string) => p.includes(".local/bin/obscura"),
-}));
-
 describe("OBSCURA_PATH", () => {
-  it("returns the obscura binary path", () => {
+  it("returns the docker exec path string", () => {
     const path = OBSCURA_PATH();
     expect(path).toBeTruthy();
     expect(typeof path).toBe("string");
+    expect(path).toContain("docker exec");
   });
 });
 
 describe("isInstalled", () => {
-  it("returns boolean without throwing", () => {
+  it("delegates to isDockerInstalled", () => {
     const result = isInstalled();
-    expect(typeof result).toBe("boolean");
+    expect(result).toBe(true);
   });
 });
 
 describe("fetchText", () => {
-  it("passes --dump text flag", async () => {
+  it("passes --dump text flag via docker exec", async () => {
     const result = await fetchText("https://example.com");
     expect(result.stdout).toContain("Hello World");
   });
@@ -61,14 +61,14 @@ describe("fetchText", () => {
 });
 
 describe("fetchHtml", () => {
-  it("passes --dump html flag", async () => {
+  it("passes --dump html flag via docker exec", async () => {
     const result = await fetchHtml("https://example.com");
     expect(result.stdout).toContain("<html>");
   });
 });
 
 describe("fetchLinks", () => {
-  it("passes --dump links flag", async () => {
+  it("passes --dump links flag via docker exec", async () => {
     const result = await fetchLinks("https://example.com");
     expect(result.stdout).toContain("https://example.com");
     expect(result.stdout).toContain("https://example.org");
@@ -76,7 +76,7 @@ describe("fetchLinks", () => {
 });
 
 describe("evalJs", () => {
-  it("passes --eval flag with expression", async () => {
+  it("passes --eval flag with expression via docker exec", async () => {
     const result = await evalJs("https://example.com", "document.title");
     expect(result.stdout).toContain("Test Page");
   });

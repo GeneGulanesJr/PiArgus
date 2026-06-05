@@ -1,6 +1,6 @@
 # PiArgus
 
-**Two-tier browser + search + PiDocs extension for Pi** — Obscura (light) + smolvm/Chromium (heavy) + SearXNG search + package documentation resolver.
+**Two-tier browser + search + PiDocs extension for Pi** — Obscura (light) + Docker/Chromium (heavy) + SearXNG search + package documentation resolver.
 
 Named for Argus Panoptes, the hundred-eyed giant of Greek myth who sees all.
 
@@ -8,27 +8,62 @@ Named for Argus Panoptes, the hundred-eyed giant of Greek myth who sees all.
 
 | Tier | Engine | Use Case |
 |------|--------|----------|
-| Light | Obscura (V8, 30MB) | Fetch, scrape, eval, links, text |
-| Heavy | smolvm + Chromium | Screenshots, clicks, forms, GPU rendering |
-| Search | SearXNG | Web search, research with page extraction |
+| Light | Obscura (V8) via Docker | Fetch, scrape, eval, links, text |
+| Heavy | Docker + Chromium | Screenshots, clicks, forms, GPU rendering |
+| Search | Docker + SearXNG | Web search, research with page extraction |
 | Docs | Registry resolvers + SearXNG fallback | Package/app documentation & install commands |
+
+All services run inside a single Docker container. Works on **Windows, Mac, and Linux**.
 
 Routes automatically — no manual tier selection needed.
 
-![PiArgus Architecture](docs/architecture.png)
+## Quick Start
 
-## Search (SearXNG)
+### 1. Build the Docker image
 
-`WEB_Search` queries a self-hosted [SearXNG](https://github.com/searxng/searxng) instance and returns ranked results (title, URL, snippet, source engines) from multiple search providers (Google, Brave, DuckDuckGo, etc.).
-
-`WEB_Research` performs deep research: search → fetch top results → keyword-extract relevant content. Returns scored paragraphs with source URLs.
-
-Set the environment variable to configure your instance:
 ```bash
-SEARXNG_URL=http://localhost:8080
+docker build -t piargus .
 ```
 
-If unset, the tool falls back to `http://192.168.100.105:30053`. Without a reachable SearXNG server, the tool returns a helpful configuration error.
+### 2. Start the container
+
+```bash
+docker run -d --name piargus \
+  -p 127.0.0.1:9222:9222 \
+  -p 127.0.0.1:8888:8080 \
+  piargus
+```
+
+This starts:
+- **Obscura** on port 9222 (light tier — fetch, scrape, eval)
+- **SearXNG** on port 8888 (metasearch engine)
+- **Chromium** available on-demand for heavy-tier operations
+
+### 3. Install the Pi extension
+
+```bash
+pi install git:github.com/genegulanesjr/PiArgus
+```
+
+Or, once published to npm:
+
+```bash
+pi install npm:piargus
+```
+
+## Search (SearXNG + DuckDuckGo)
+
+`web_search` searches the web using DuckDuckGo (routed through the Obscura container for isolation) and returns titles, URLs, and snippets.
+
+`web_research` performs deep research: search → fetch top results → keyword-extract relevant content. Returns scored paragraphs with source URLs.
+
+SearXNG is also available for metasearch across multiple providers (Google, Brave, DuckDuckGo, etc.):
+
+```bash
+SEARXNG_URL=http://localhost:8888
+```
+
+If unset, defaults to `http://localhost:8888`.
 
 ## PiDocs (Package & App Documentation)
 
@@ -72,7 +107,7 @@ pidocs_install(name: "nginx", platform: "linux")
 **User config** (`~/.pidocs.json`) — disable specific resolvers or add custom ones:
 ```json
 {
-  "searxngUrl": "http://localhost:8080",
+  "searxngUrl": "http://localhost:8888",
   "resolvers": {
     "npm": { "enabled": true },
     "brew": { "enabled": false },
@@ -85,23 +120,8 @@ pidocs_install(name: "nginx", platform: "linux")
 
 ## Requirements
 
-- **Light tier**: [Obscura](https://github.com/obscura-browser/obscura) (`~/.local/bin/obscura`)
-- **Heavy tier**: [smolvm](https://smolmachines.com) (`~/.local/bin/smolvm`)
-- **Search**: SearXNG instance (local or remote)
-
-Heavy tier and search are optional — light tier works standalone.
-
-## Install
-
-```bash
-pi install git:github.com/genegulanesjr/PiArgus
-```
-
-Or, once published to npm:
-
-```bash
-pi install npm:piargus
-```
+- **Docker** — the only requirement. Install: https://docs.docker.com/get-docker/
+- Works on Windows, Mac, and Linux
 
 ## Test
 
@@ -113,8 +133,8 @@ npm test
 
 | Tool | Tier | Description |
 |------|------|-------------|
-| `WEB_Search` | Search | SearXNG metasearch (titles, URLs, snippets, engines) |
-| `WEB_Research` | Search | Deep research: search → fetch → keyword-extract |
+| `web_search` | Search | DuckDuckGo search (titles, URLs, snippets) |
+| `web_research` | Search | Deep research: search → fetch → keyword-extract |
 | `pidocs_lookup` | Docs | Find documentation URLs for packages & apps |
 | `pidocs_install` | Docs | Get install commands organized by platform |
 | `browser_fetch` | Light | Fetch page as text/html/links/eval |
@@ -122,20 +142,23 @@ npm test
 | `browser_scrape` | Light | Bulk parallel scraping |
 | `browser_screenshot` | Heavy | Full-page screenshots via Puppeteer + Chromium |
 | `browser_action` | Dual | JS eval (light) or click/fill/hover (heavy) via CDP |
-| `browser_vm_status` | Both | Status check / pre-warm heavy VM |
+| `browser_vm_status` | Both | Status check / pre-warm Docker container |
 
 ## Source Structure
 
 | File | Purpose |
 |------|---------|
 | `index.ts` | Extension entry point, browser tool registration |
-| `obscura.ts` | Light tier — Obscura V8 browser bindings |
-| `smolvm.ts` | Heavy tier — smolvm + Chromium + SearXNG VM management |
+| `obscura.ts` | Light tier — Obscura V8 browser bindings (via docker exec) |
+| `docker.ts` | Heavy tier — Docker container management + Chromium + SearXNG |
 | `tier-router.ts` | Auto-routes actions to light or heavy tier |
-| `web-search-core.ts` | SearXNG search + research logic |
-| `web-search.ts` | WEB_Search + WEB_Research tool registration |
+| `web-search-core.ts` | DuckDuckGo + SearXNG search + research logic |
+| `web-search.ts` | web_search + web_research tool registration |
 | `pidocs-resolvers.ts` | 11 built-in registry resolvers + type detection |
 | `pidocs-install-extract.ts` | Install command extraction from page text |
 | `pidocs-core.ts` | Resolver pipeline orchestration (built-in → SearXNG → fetch → extract) |
 | `pidocs.ts` | pidocs_lookup + pidocs_install tool registration + before_agent_start hook |
 | `types.ts` | Shared TypeScript types |
+| `Dockerfile` | Single container: Obscura + Chromium + SearXNG |
+| `docker/supervisord.conf` | Process manager for container services |
+| `docker/searxng-settings.yml` | SearXNG configuration (JSON format enabled) |

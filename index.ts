@@ -1,14 +1,12 @@
 // index.ts — Unified tiered browser extension
-// Light tier: Obscura (V8-based, 30MB) for fast stateless fetches
-// Heavy tier: smolvm+Chromium for full browser automation
+// Light tier: Obscura (V8-based) for fast stateless fetches
+// Heavy tier: Docker+Chromium for full browser automation
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { readFile } from "node:fs/promises";
 
-// Light tier
 import {
-  OBSCURA_PATH,
   isInstalled as isObscuraInstalled,
   fetchText,
   fetchHtml,
@@ -17,30 +15,24 @@ import {
   execAsync as obscuraExec,
 } from "./obscura";
 
-// Heavy tier
 import {
-  isSmolvmInstalled,
-  ensureVm,
-  ensureSearchVm,
-  stopVm,
-  screenshot as smolvmScreenshot,
+  isDockerInstalled,
+  ensureContainer,
+  stopContainer,
+  screenshot as dockerScreenshot,
   interact,
-  getVmStatus,
-  stopSearchVm,
+  getContainerStatus,
   getSearchVmStatus,
   SEARXNG_LOCAL_URL,
-} from "./smolvm";
+  ensureSearchVm,
+} from "./docker";
 
-// Router
 import { classifyTier } from "./tier-router";
 
-// Web search
 import { registerWebSearch, registerWebResearch } from "./web-search";
 
-// PiDocs
 import { registerPidocs } from "./pidocs";
 
-// Types
 import type { BrowserTier } from "./types";
 
 const MAX_CONTENT_CHARS = 100_000;
@@ -63,13 +55,7 @@ function truncate(content: string): string {
     `\n\n... (truncated, ${content.length} total chars)`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Extension entry
-// ═══════════════════════════════════════════════════════════════════════════
-
 export default async function (pi: ExtensionAPI) {
-  // Track all tool names registered by this extension so the session_start
-  // handler can activate them without a hardcoded list.
   const registeredToolNames: string[] = [];
   const origRegisterTool = pi.registerTool.bind(pi);
   pi.registerTool = ((def: any) => {
@@ -77,33 +63,14 @@ export default async function (pi: ExtensionAPI) {
     return origRegisterTool(def);
   }) as typeof pi.registerTool;
 
-  // Auto-stop search VM on session shutdown (it has a persistent exec session
-  // tied to this process). The browser VM is NOT stopped so other pi sessions
-  // can reuse it without a cold start.
   pi.on("session_shutdown", async () => {
-    try { await stopSearchVm(); } catch { /* best-effort */ }
+    try { await stopContainer(); } catch { /* best-effort */ }
   });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: web_search (SearXNG metasearch)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   registerWebSearch(pi);
   registerWebResearch(pi);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: PiDocs (package/app documentation & install resolver)
-  // ═══════════════════════════════════════════════════════════════════════════
-
   registerPidocs(pi);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ENSURE TOOL VISIBILITY — In fresh/new pi setups, the async extension
-  // factory can race with pi's initial _refreshToolRegistry(). This hook
-  // force-activates PiArgus tools on session_start so they appear in the
-  // "Available tools" section and the LLM can call them automatically.
-  // Tool names are tracked dynamically so new tools are included automatically.
-  // ═══════════════════════════════════════════════════════════════════════════
 
   pi.on("session_start", () => {
     const active = pi.getActiveTools();
@@ -112,10 +79,6 @@ export default async function (pi: ExtensionAPI) {
       pi.setActiveTools([...active, ...missing]);
     }
   });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: browser_navigate (LIGHT — Obscura)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   pi.registerTool({
     name: "browser_navigate",
@@ -153,17 +116,13 @@ export default async function (pi: ExtensionAPI) {
     },
   });
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: browser_fetch (LIGHT — Obscura)
-  // ═══════════════════════════════════════════════════════════════════════════
-
   pi.registerTool({
     name: "browser_fetch",
     label: "Browser Fetch",
     description:
       "Fetch and render a web page, returning content as HTML, plain text, " +
       "extracted links, or the result of a JavaScript expression. " +
-      "Obscura is a headless Rust browser (30MB, V8-based, built-in stealth).",
+      "Obscura is a headless Rust browser (V8-based, built-in stealth).",
     promptSnippet: "Fetch a web page and return its content",
     promptGuidelines: [
       "Use browser_fetch when you need to read a web page's content.",
@@ -219,25 +178,21 @@ export default async function (pi: ExtensionAPI) {
     },
   });
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: browser_screenshot (HEAVY — smolvm+Chromium)
-  // ═══════════════════════════════════════════════════════════════════════════
-
   pi.registerTool({
     name: "browser_screenshot",
     label: "Browser Screenshot",
     description:
-      "Take a screenshot of a web page using Puppeteer + Chromium inside a smolvm microVM. " +
+      "Take a screenshot of a web page using Puppeteer + Chromium inside a Docker container. " +
       "Returns the captured PNG. " +
-      "The VM is lazily created on first use and reused for subsequent requests.",
+      "The container is lazily created on first use and reused for subsequent requests.",
     promptSnippet: "Take a screenshot of a web page",
     promptGuidelines: [
       "Use browser_screenshot to visually verify a page's state.",
       "Pass the URL directly — no need to navigate first.",
-      "Screenshots use Puppeteer + Chromium in a hardware-isolated smolvm microVM.",
-      "First call may take a few seconds to boot the VM (sub-200ms on subsequent uses).",
-      "Heavy-tier VM is reused between calls and stops automatically on session shutdown.",
-      "If smolvm is not installed, heavy-tier calls return a clear install message.",
+      "Screenshots use Puppeteer + Chromium inside a Docker container.",
+      "First call may take a few seconds to start the container.",
+      "Heavy-tier container is reused between calls.",
+      "If Docker is not installed, heavy-tier calls return a clear install message.",
     ],
     parameters: Type.Object({
       url: Type.String({ description: "URL to screenshot" }),
@@ -250,7 +205,7 @@ export default async function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const outputPath = params.path || "/tmp/shot.png";
 
-      const result = await smolvmScreenshot(params.url, outputPath, {
+      const result = await dockerScreenshot(params.url, outputPath, {
         fullPage: params.full_page,
         width: params.width,
         height: params.height,
@@ -260,7 +215,6 @@ export default async function (pi: ExtensionAPI) {
         return { content: [{ type: "text", text: `Screenshot failed: ${result.error}` }], details: undefined, isError: true };
       }
 
-      // Read the screenshot file and return as base64 image
       try {
         const imageBuffer = await readFile(outputPath);
         const base64 = imageBuffer.toString("base64");
@@ -293,22 +247,18 @@ export default async function (pi: ExtensionAPI) {
     },
   });
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: browser_action (DUAL-TIER)
-  // ═══════════════════════════════════════════════════════════════════════════
-
   pi.registerTool({
     name: "browser_action",
     label: "Browser Action",
     description:
       "Perform actions on a web page. Light actions (js, navigate, screenshot_info) use Obscura. " +
-      "Heavy actions (click, fill, hover, wait_for) use Chromium inside a smolvm microVM.",
+      "Heavy actions (click, fill, hover, wait_for) use Chromium inside a Docker container.",
     promptSnippet: "Run JavaScript or interact with a web page",
     promptGuidelines: [
       "Use action='js' to evaluate JavaScript (Obscura — fast).",
       "Use action='navigate' to get page info (Obscura — fast).",
-      "Use action='click' to click an element (smolvm+Chromium — full DOM).",
-      "Use action='fill' to fill a form field (smolvm+Chromium — full DOM).",
+      "Use action='click' to click an element (Docker+Chromium — full DOM).",
+      "Use action='fill' to fill a form field (Docker+Chromium — full DOM).",
       "Use action='screenshot_info' to get viewport dimensions (Obscura — fast).",
       "Always JSON.stringify your result in JS eval expressions — eval returns strings.",
     ],
@@ -339,7 +289,6 @@ export default async function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const tier = classifyTier("browser_action", params);
 
-      // ── Light tier (Obscura) ──────────────────────────────────────────
       if (tier === "light") {
         switch (params.action) {
           case "js": {
@@ -395,20 +344,18 @@ export default async function (pi: ExtensionAPI) {
         }
       }
 
-      // ── Heavy tier (smolvm+Chromium via puppeteer-core CDP) ────────────
-      if (!isSmolvmInstalled()) {
+      if (!isDockerInstalled()) {
         return {
           content: [{
             type: "text",
-            text: `Heavy-tier action '${params.action}' requires smolvm. Install: curl -sSL https://smolmachines.com/install.sh | bash`,
+            text: `Heavy-tier action '${params.action}' requires Docker. Install: https://docs.docker.com/get-docker/`,
           }],
           details: undefined,
           isError: true,
         };
       }
 
-      // Map the action to an InteractionAction
-      let interactionAction: import("./smolvm").InteractionAction;
+      let interactionAction: import("./docker").InteractionAction;
       switch (params.action) {
         case "click":
           if (!params.selector && (params.x === undefined || params.y === undefined)) {
@@ -456,10 +403,6 @@ export default async function (pi: ExtensionAPI) {
       };
     },
   });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: browser_scrape (LIGHT — Obscura, parallelized)
-  // ═══════════════════════════════════════════════════════════════════════════
 
   pi.registerTool({
     name: "browser_scrape",
@@ -510,22 +453,17 @@ export default async function (pi: ExtensionAPI) {
     },
   });
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOOL: browser_vm_status — Check VM state (replaces browser_obscura_serve)
-  // ═══════════════════════════════════════════════════════════════════════════
-
   pi.registerTool({
     name: "browser_vm_status",
     label: "Browser VM Status",
     description:
       "Check the status of the browser infrastructure. Reports Obscura (light tier) " +
-      "and smolvm+Chromium (heavy tier) availability. " +
-      "Pass action='start' to pre-warm the heavy-tier VM.",
+      "and Docker+Chromium (heavy tier) availability. " +
+      "Pass action='start' to pre-warm the Docker container.",
     promptSnippet: "Check browser infrastructure status or pre-warm heavy tier",
     promptGuidelines: [
       "Use action='status' to check what's available (default).",
-      "Use action='start' to pre-warm the smolvm VM and SearXNG search VM before heavy or search operations.",
-      "The heavy-tier VM boots in <200ms after first creation.",
+      "Use action='start' to pre-warm the Docker container and SearXNG before heavy or search operations.",
     ],
     parameters: Type.Object({
       action: Type.Optional(Type.String({ description: "Action: 'status' | 'start'. Default: 'status'." })),
@@ -533,41 +471,40 @@ export default async function (pi: ExtensionAPI) {
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
       const obscuraOk = isObscuraInstalled();
-      const smolvmOk = isSmolvmInstalled();
+      const dockerOk = isDockerInstalled();
 
       if (params.action === "start") {
-        if (!smolvmOk) {
+        if (!dockerOk) {
           return {
             content: [{
               type: "text",
-              text: "smolvm not installed. Install: curl -sSL https://smolmachines.com/install.sh | bash",
+              text: "Docker not installed. Install: https://docs.docker.com/get-docker/",
             }],
             details: undefined,
             isError: true,
           };
         }
 
-        const ensure = await ensureVm();
+        const ensure = await ensureContainer();
         const searchEnsure = await ensureSearchVm();
         return {
           content: [{
             type: "text",
             text: [
               ensure.running
-                ? "✅ Heavy-tier VM (pi-browser-heavy) is running and ready for screenshots, clicks, and form fills."
-                : `❌ Heavy-tier VM failed: ${ensure.error}`,
+                ? "✅ Docker container (piargus) is running — Chromium + Obscura ready."
+                : `❌ Docker container failed: ${ensure.error}`,
               searchEnsure.running
-                ? "✅ Search VM (pi-search-searxng) is running and ready for web searches."
-                : `⚠️  Search VM: ${searchEnsure.error || "not started"}`,
+                ? "✅ SearXNG is running and ready for web searches."
+                : `⚠️  SearXNG: ${searchEnsure.error || "not started"}`,
             ].join("\n"),
           }],
           details: { action: "start", vmRunning: ensure.running, searchRunning: searchEnsure.running },
         };
       }
 
-      // Status check
-      const vmState = smolvmOk ? await getVmStatus() : "not-installed" as const;
-      const searchVmState = smolvmOk ? await getSearchVmStatus() : "not-installed" as const;
+      const vmState = dockerOk ? await getContainerStatus() : "not-installed" as const;
+      const searchVmState = dockerOk ? await getSearchVmStatus() : "not-installed" as const;
 
       return {
         content: [{
@@ -575,21 +512,21 @@ export default async function (pi: ExtensionAPI) {
           text:
             `═══ Browser Infrastructure Status ═══\n\n` +
             `🔍 Light Tier (Obscura)\n` +
-            `   Installed: ${obscuraOk ? "✅ " + OBSCURA_PATH() : "❌"}\n` +
+            `   Mode: Docker container (docker exec piargus obscura)\n` +
             `   Use for: fetch, navigate, scrape, eval, links, text\n\n` +
-            `🖥️  Heavy Tier (smolvm + Chromium)\n` +
-            `   smolvm installed: ${smolvmOk ? "✅" : "❌"}\n` +
-            `   VM state: ${vmState}\n` +
+            `🖥️  Heavy Tier (Docker + Chromium)\n` +
+            `   Docker installed: ${dockerOk ? "✅" : "❌"}\n` +
+            `   Container state: ${vmState}\n` +
             `   Use for: screenshots, clicks, form fills, CDP automation\n\n` +
-            `🔎 Search Tier (smolvm + SearXNG)\n` +
-            `   VM state: ${searchVmState}\n` +
+            `🔎 Search Tier (Docker + SearXNG)\n` +
+            `   Container state: ${searchVmState}\n` +
             `   SearXNG URL: ${process.env.SEARXNG_URL || SEARXNG_LOCAL_URL}\n` +
             `   JSON format: ✅ enabled\n\n` +
-            `💡 Tip: Call with action='start' to pre-warm the heavy tier.`,
+            `💡 Tip: Call with action='start' to pre-warm the container.`,
         }],
         details: {
           obscuraInstalled: obscuraOk,
-          smolvmInstalled: smolvmOk,
+          dockerInstalled: dockerOk,
           vmState,
           searchVmState,
         },

@@ -45,25 +45,11 @@ export function registerWebSearch(pi: ExtensionAPI) {
           "'FastAPI dependency injection tutorial', 'Python asyncio subprocess timeout error'.",
       }),
       categories: Type.Optional(
-        Type.Union(
-          [
-            Type.Literal("general"),
-            Type.Literal("images"),
-            Type.Literal("videos"),
-            Type.Literal("news"),
-            Type.Literal("map"),
-            Type.Literal("music"),
-            Type.Literal("it"),
-            Type.Literal("science"),
-            Type.Literal("files"),
-            Type.Literal("social media"),
-          ],
-          {
-            description:
-              "Search category. Use 'it' for programming/tech, 'news' for recent events, " +
-              "'science' for academic, 'general' for everything. Default: general.",
-          }
-        )
+        Type.String({
+          description:
+            "Search category: 'general' | 'images' | 'videos' | 'news' | 'map' | 'music' | 'it' | 'science' | 'files' | 'social media'. " +
+            "Use 'it' for programming/tech, 'news' for recent events, 'science' for academic, 'general' for everything. Default: general.",
+        })
       ),
       language: Type.Optional(
         Type.String({
@@ -158,17 +144,9 @@ export function registerWebResearch(pi: ExtensionAPI) {
           "'How does Rust's borrow checker work', 'FastAPI dependency injection best practices'.",
       }),
       categories: Type.Optional(
-        Type.Union(
-          [
-            Type.Literal("general"),
-            Type.Literal("it"),
-            Type.Literal("science"),
-            Type.Literal("news"),
-          ],
-          {
-            description: "Search category. 'it' for tech, 'science' for academic, 'general' for everything.",
-          }
-        )
+        Type.String({
+          description: "Search category: 'general' | 'it' | 'science' | 'news'. Default: general.",
+        })
       ),
       language: Type.Optional(
         Type.String({

@@ -198,7 +198,7 @@ export function registerPidocs(pi: ExtensionAPI) {
   // ═════════════════════════════════════════════════════════════════════════
 
   pi.on("before_agent_start", async (event) => {
-    const prompt = event.prompt.toLowerCase();
+    const prompt = (event.prompt ?? "").toLowerCase();
 
     const hasInstallIntent = INSTALL_PATTERNS.some((p) => p.test(prompt));
     const hasPackageRef = PACKAGE_PATTERNS.some((p) => p.test(prompt));

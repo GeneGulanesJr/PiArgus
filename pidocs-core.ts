@@ -88,8 +88,8 @@ export async function resolveLookup(
     const fetchUrl = resolverResult.installUrl || resolverResult.urls[0];
     if (fetchUrl) {
       try {
-        const { stdout, stderr } = await fetchText(fetchUrl, { timeout: 10_000 });
-        if (stdout && !stderr) {
+        const { stdout } = await fetchText(fetchUrl, { timeout: 10_000 });
+        if (stdout) {
           const firstParagraph = stdout
             .slice(0, 500)
             .split("\n")
@@ -231,9 +231,9 @@ export async function resolveInstall(
   let description: string | undefined;
 
   try {
-    const { stdout, stderr } = await fetchText(sourceUrl, { timeout: 15_000 });
+    const { stdout } = await fetchText(sourceUrl, { timeout: 15_000 });
 
-    if (stdout && !stderr) {
+    if (stdout) {
       installCommands = extractInstallCommands(name, stdout);
 
       // Extract a short description from the first 500 chars

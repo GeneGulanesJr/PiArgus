@@ -45,9 +45,21 @@ import type { BrowserTier } from "./types";
 
 const MAX_CONTENT_CHARS = 100_000;
 
+/** Collapse 3+ consecutive blank lines into 2, and strip trailing whitespace per line.
+ *  Obscura's text dump often produces excessive blank lines from nav/spacer divs
+ *  that waste tokens without adding information. */
+function compact(content: string): string {
+  return content
+    .replace(/[^\S\n]+$/gm, "")       // trailing whitespace per line
+    .replace(/\n{3,}/g, "\n\n")       // collapse 3+ blank lines → 2
+    .replace(/^\n+/, "")              // leading blank lines
+    .replace(/\n+$/, "");             // trailing blank lines
+}
+
 function truncate(content: string): string {
-  if (content.length <= MAX_CONTENT_CHARS) return content;
-  return content.slice(0, MAX_CONTENT_CHARS) +
+  const compacted = compact(content);
+  if (compacted.length <= MAX_CONTENT_CHARS) return compacted;
+  return compacted.slice(0, MAX_CONTENT_CHARS) +
     `\n\n... (truncated, ${content.length} total chars)`;
 }
 
@@ -479,7 +491,7 @@ export default async function (pi: ExtensionAPI) {
           const args = ["fetch", url, "--dump", dumpMode, "--quiet"];
           if (params.eval) args.push("--eval", params.eval);
           const { stdout, stderr } = await obscuraExec(args, 15_000);
-          return { url, content: stdout, error: stderr && !stdout ? stderr : undefined };
+          return { url, content: compact(stdout), error: stderr && !stdout ? stderr : undefined };
         });
         const batchResults = await Promise.all(promises);
         results.push(...batchResults);

@@ -623,6 +623,17 @@ export async function searchWeb(
   }
 
   const html = await response.text();
+
+  // Detect CAPTCHA / rate-limit pages — DDG serves these as 200/202 with
+  // an "anomaly-modal" puzzle. Returning zero results silently hides the
+  // real problem. Throw a descriptive error so the tool can report it.
+  if (html.includes("anomaly-modal") || html.includes("data-testid=\"anomaly-modal")) {
+    throw new Error(
+      "DuckDuckGo is serving a CAPTCHA challenge — search is temporarily blocked. " +
+      "Try again later or use a different search method."
+    );
+  }
+
   const results: SearchResult[] = [];
   const blockRegex = /<div[^>]*class="result__body"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
   const linkRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i;

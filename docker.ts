@@ -11,7 +11,7 @@ import type { ContainerState } from "./types";
 const execFileAsync = promisify(execFileCb);
 
 const CONTAINER_NAME = "piargus";
-const DOCKER_IMAGE = process.env.PIARGUS_DOCKER_IMAGE || "piargus";
+const DOCKER_IMAGE = process.env.PIARGUS_DOCKER_IMAGE || "genegulanesjr/piargus:latest";
 const CACHE_TTL_MS = 30_000;
 
 export const SEARXNG_PORT = parseInt(process.env.PIARGUS_SEARXNG_PORT || "8888", 10);
